@@ -114,7 +114,7 @@ fn detects_inspects_cleans_and_rebuilds_a_workspace() {
 
     rust.rebuild_group(&project, debug, &["--workspace".into()])
         .unwrap();
-    assert!(debug.paths[0].join(".fingerprint").is_dir());
+    assert!(debug.paths[0].join(".cargo-lock").is_file());
 
     rust.clean_all(&project).unwrap();
     assert!(!project.artifact_dir.exists());
@@ -202,59 +202,49 @@ fn trimming_a_stale_build_keeps_the_live_one_fresh() {
     let tmp = tempfile::tempdir().unwrap();
     let root = dunce::canonicalize(tmp.path()).unwrap();
     package(&root);
-    let fingerprints = root.join("target/debug/.fingerprint");
-    let units = || -> HashSet<String> {
-        fs::read_dir(&fingerprints)
+    let profile = root.join("target/debug");
+    // Builds (not incremental caches) in the debug profile, whatever the layout.
+    let units = |rust: &Rust| -> HashSet<String> {
+        let project = rust.detect(&root).unwrap().unwrap();
+        rust.inspect(&project)
             .unwrap()
-            .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
+            .group("debug")
+            .unwrap()
+            .parts
+            .iter()
+            .filter(|part| !part.id.starts_with("incremental/"))
+            .map(|part| part.id.clone())
             .collect()
     };
 
     // The same crate built with two feature sets: two units.
     cargo_build(&root, &[]);
-    let stale = units();
+    let stale = units(&Rust::new());
     cargo_build(&root, &["--features", "extra"]);
-    assert!(units().len() > stale.len());
+    assert!(units(&Rust::new()).len() > stale.len());
 
     // Make the first build look a month old, as if never used since.
     let month_ago = SystemTime::now() - Duration::from_hours(24 * 30);
-    for unit in &stale {
-        for file in fs::read_dir(fingerprints.join(unit)).unwrap() {
-            fs::File::options()
-                .write(true)
-                .open(file.unwrap().path())
-                .unwrap()
-                .set_times(
-                    fs::FileTimes::new()
-                        .set_accessed(month_ago)
-                        .set_modified(month_ago),
-                )
-                .unwrap();
-        }
-    }
+    age_files(&profile, &stale, month_ago);
 
     let rust = Rust::new();
     let project = rust.detect(&root).unwrap().unwrap();
     let artifacts = rust.inspect(&project).unwrap();
     let debug = artifacts.group("debug").unwrap();
-    let hashes: Vec<String> = stale
-        .iter()
-        .filter_map(|unit| unit.rsplit_once('-').map(|(_, hash)| hash.to_owned()))
-        .collect();
     let old: Vec<String> = debug
         .parts
         .iter()
-        .filter(|part| hashes.contains(&part.id))
+        .filter(|part| stale.contains(&part.id))
         .map(|part| {
-            assert_eq!(part.built, Some(month_ago));
-            assert!(part.toolchain.is_some());
+            assert_eq!(part.built, Some(month_ago), "{}", part.id);
+            assert!(part.toolchain.is_some(), "{}", part.id);
             part.id.clone()
         })
         .collect();
-    assert_eq!(old.len(), hashes.len());
+    assert_eq!(old.len(), stale.len());
 
     rust.trim(&project, debug, &old).unwrap();
-    assert_eq!(units().intersection(&stale).count(), 0);
+    assert_eq!(units(&Rust::new()).intersection(&stale).count(), 0);
     // The live build is untouched: nothing to compile.
     assert!(!compiled_anything(&cargo_build(
         &root,
@@ -262,4 +252,25 @@ fn trimming_a_stale_build_keeps_the_live_one_fresh() {
     )));
     // The trimmed one is simply built again when asked for.
     assert!(compiled_anything(&cargo_build(&root, &[])));
+}
+
+/// Sets both times of every file under `dir` whose path names one of the
+/// unit `hashes`, in either of Cargo's layouts.
+fn age_files(dir: &Path, hashes: &HashSet<String>, when: SystemTime) {
+    for entry in fs::read_dir(dir).unwrap() {
+        let path = entry.unwrap().path();
+        if path.is_dir() {
+            age_files(&path, hashes, when);
+        } else if hashes
+            .iter()
+            .any(|hash| path.to_string_lossy().contains(hash.as_str()))
+        {
+            fs::File::options()
+                .write(true)
+                .open(&path)
+                .unwrap()
+                .set_times(fs::FileTimes::new().set_accessed(when).set_modified(when))
+                .unwrap();
+        }
+    }
 }

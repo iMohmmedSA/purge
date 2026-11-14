@@ -6,11 +6,13 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
-homepage.workspace = true
 
 [dependencies]
-directories.workspace = true
 thiserror.workspace = true
+
+# Only the systemd and launchd backends look up the home directory.
+[target.'cfg(any(target_os = "linux", target_os = "macos"))'.dependencies]
+directories.workspace = true
 
 [lints]
 workspace = true

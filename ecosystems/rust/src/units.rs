@@ -8,6 +8,10 @@
 //! Every check whether a unit is fresh reads its fingerprint, so where the
 //! filesystem records access times, they show when a unit was last used.
 //!
+//! Cargo 1.100 keeps each unit in a directory of its own instead,
+//! `build/<crate>/<hash>/`, with the fingerprint in `fingerprint/` and the
+//! output in `out/`. A profile built by both releases holds both layouts.
+//!
 //! Units are never shared or updated in place: a changed crate, option or
 //! compiler makes a new unit beside the old one, which is left behind for
 //! good. Incremental compilation caches (`incremental/<name>`) are rewritten
@@ -61,6 +65,22 @@ pub(crate) fn parts(dirs: &[PathBuf], used_times: bool) -> Vec<Part> {
             }
         }
     }
+    for dir in dirs {
+        for (hash, unit_dir) in unit_dirs(dir) {
+            let found = read_fingerprint(&unit_dir.join("fingerprint"), used_times);
+            let unit = units.entry(hash.clone()).or_insert_with(|| Part {
+                id: hash,
+                bytes: 0,
+                built: None,
+                used: None,
+                toolchain: None,
+            });
+            unit.bytes += fsutil::disk_usage(&unit_dir).bytes;
+            unit.built = unit.built.max(found.built);
+            unit.used = unit.used.max(found.used);
+            unit.toolchain = unit.toolchain.take().or(found.toolchain);
+        }
+    }
     let mut parts: Vec<Part> = units.into_values().collect();
     for dir in dirs {
         for cache in fsutil::children(&dir.join(INCREMENTAL)) {
@@ -98,11 +118,27 @@ pub(crate) fn trim(dirs: &[PathBuf], ids: &[String]) -> io::Result<()> {
                 }
             }
         }
+        for (hash, unit_dir) in unit_dirs(dir) {
+            if hashes.contains(hash.as_str()) {
+                remove(&unit_dir)?;
+            }
+        }
         for name in &caches {
             remove(&dir.join(INCREMENTAL).join(name))?;
         }
     }
     Ok(())
+}
+
+/// Cargo 1.100's unit directories in a profile, `build/<crate>/<hash>/`,
+/// with their hashes.
+fn unit_dirs(profile: &Path) -> impl Iterator<Item = (String, PathBuf)> + use<> {
+    fsutil::children(&profile.join("build"))
+        .flat_map(|krate| fsutil::children(&krate))
+        .filter_map(|unit| {
+            let name = file_name(&unit);
+            (is_hash(&name) && unit.is_dir()).then_some((name, unit))
+        })
 }
 
 /// The unit hash in a file name such as `libserde-0123456789abcdef.rlib`:
@@ -186,8 +222,7 @@ fn read_fingerprint(dir: &Path, used_times: bool) -> Fingerprint {
 
 fn file_name(path: &Path) -> String {
     path.file_name()
-        .map(|name| name.to_string_lossy().into_owned())
-        .unwrap_or_default()
+        .map_or_default(|name| name.to_string_lossy().into_owned())
 }
 
 #[cfg(test)]
@@ -288,6 +323,42 @@ mod tests {
         ] {
             assert!(debug.join(&kept).exists(), "{kept} was removed");
         }
+    }
+
+    /// Cargo 1.100's layout: one directory per unit.
+    fn profile_v2() -> (tempfile::TempDir, PathBuf) {
+        let tmp = tempfile::tempdir().unwrap();
+        let debug = tmp.path().join("debug");
+        for (hash, rustc) in [(OLD, 111), (NEW, 222)] {
+            let unit = debug.join(format!("build/foo/{hash}"));
+            file(&unit.join("fingerprint/lib-foo"), "x");
+            file(
+                &unit.join("fingerprint/lib-foo.json"),
+                &format!(r#"{{"rustc":{rustc}}}"#),
+            );
+            file(
+                &unit.join(format!("out/libfoo-{hash}.rlib")),
+                &"x".repeat(5000),
+            );
+        }
+        file(&debug.join("libfoo.rlib"), "final");
+        file(&debug.join(".cargo-lock"), "");
+        (tmp, debug)
+    }
+
+    #[test]
+    fn finds_and_trims_units_in_the_new_layout() {
+        let (_tmp, debug) = profile_v2();
+        let parts = parts(std::slice::from_ref(&debug), false);
+        let ids: Vec<&str> = parts.iter().map(|p| p.id.as_str()).collect();
+        assert_eq!(ids, [OLD, NEW]);
+        assert_eq!(parts[0].toolchain.as_deref(), Some("111"));
+        assert!(parts[0].bytes >= 5000);
+
+        trim(std::slice::from_ref(&debug), &[OLD.to_owned()]).unwrap();
+        assert!(!debug.join(format!("build/foo/{OLD}")).exists());
+        assert!(debug.join(format!("build/foo/{NEW}/out")).exists());
+        assert!(debug.join("libfoo.rlib").exists());
     }
 
     #[test]

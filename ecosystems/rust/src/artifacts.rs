@@ -1,7 +1,7 @@
 //! Measuring a workspace's build output, one group per profile.
 //!
-//! Profiles are recognised in the build directory by the `.fingerprint/`
-//! Cargo keeps in each. When `build.build-dir` keeps intermediate files
+//! Profiles are recognised in the build directory by the lock files Cargo
+//! keeps in each (and, up to Cargo 1.99, a `.fingerprint/` directory). When `build.build-dir` keeps intermediate files
 //! apart, `target/` holds only final artifacts, in profile folders of the
 //! same names; those join the matching group.
 
@@ -106,15 +106,19 @@ fn add(
         .push(path);
 }
 
-/// Cargo writes a `.fingerprint/` directory into every profile directory.
+/// Lock files Cargo keeps in every profile directory it builds into.
+/// Cargo 1.99+ uses all of them; older releases only `.cargo-lock`.
+pub(crate) const BUILD_LOCKS: &[&str] =
+    &[".cargo-lock", ".cargo-build-lock", ".cargo-artifact-lock"];
+
+/// Whether `dir` is a profile directory Cargo built into.
 pub(crate) fn is_profile_dir(dir: &Path) -> bool {
-    dir.join(".fingerprint").is_dir()
+    dir.join(".fingerprint").is_dir() || BUILD_LOCKS.iter().any(|lock| dir.join(lock).is_file())
 }
 
 fn file_name(path: &Path) -> String {
     path.file_name()
-        .map(|name| name.to_string_lossy().into_owned())
-        .unwrap_or_default()
+        .map_or_default(|name| name.to_string_lossy().into_owned())
 }
 
 #[cfg(test)]
@@ -173,6 +177,26 @@ mod tests {
             artifacts.total_bytes > in_groups,
             "flycheck output is counted"
         );
+    }
+
+    #[test]
+    fn recognises_profiles_of_either_layout() {
+        let dir = tempfile::tempdir().unwrap();
+        let target = dir.path().join("target");
+        // Up to Cargo 1.99: a `.fingerprint/` directory.
+        fs::create_dir_all(target.join("debug/.fingerprint")).unwrap();
+        // Cargo 1.100: lock files, units under `build/<crate>/<hash>/`.
+        file(&target.join("release/.cargo-lock"), 0);
+        file(
+            &target.join("release/build/x/0123456789abcdef/out/libx.rlib"),
+            8192,
+        );
+        file(&target.join("doc/index.html"), 10);
+
+        let artifacts = inspect(&project(dir.path(), &[&target]), false).unwrap();
+        let ids: Vec<&str> = artifacts.groups.iter().map(|g| g.id.as_str()).collect();
+        assert_eq!(ids, ["debug", "release"]);
+        assert_eq!(artifacts.group("release").unwrap().parts.len(), 1);
     }
 
     #[test]

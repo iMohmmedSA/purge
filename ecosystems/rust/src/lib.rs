@@ -22,7 +22,7 @@ use purge_process::{ProcessTable, configure_background};
 use tracing::{debug, warn};
 
 use crate::{
-    artifacts::is_profile_dir,
+    artifacts::{BUILD_LOCKS, is_profile_dir},
     layout::{Layout, Metadata},
 };
 
@@ -281,10 +281,6 @@ fn profile_args(group: &ArtifactGroup) -> Vec<String> {
     }
     args
 }
-
-/// Lock files Cargo holds in a profile directory while building. Cargo 1.99
-/// holds all of them; older releases only `.cargo-lock`.
-const BUILD_LOCKS: &[&str] = &[".cargo-lock", ".cargo-build-lock", ".cargo-artifact-lock"];
 
 /// Whether a build currently holds any of Cargo's locks under `target`.
 fn build_lock_held(target: &Path) -> bool {

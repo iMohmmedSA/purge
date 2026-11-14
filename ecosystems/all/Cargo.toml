@@ -1,0 +1,16 @@
+[package]
+name = "purge-ecosystems"
+description = "Registry of every supported ecosystem"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+
+[dependencies]
+purge-ecosystem.workspace = true
+purge-rust.workspace = true
+
+[lints]
+workspace = true

@@ -1,0 +1,44 @@
+# Runs when a reviewed draft release is published: uploads every crate of
+# the workspace to crates.io, so `cargo install purge` gets the new version.
+#
+# Needs the secret CARGO_REGISTRY_TOKEN in the `crates-io` environment
+# (Settings > Environments), not as a repository secret: then only this job,
+# run from a `v*` tag and approved by a reviewer, can read it. It is a
+# crates.io API token with the publish-new and publish-update scopes,
+# limited to `purge*`. Publishing cannot be undone (a version can be
+# yanked, never replaced).
+name: Publish
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  crates-io:
+    runs-on: ubuntu-latest
+    # Holds the token; set it to require your approval and allow only `v*` tags.
+    environment: crates-io
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.release.tag_name }}
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Check the tag matches the version
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          version=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[] | select(.name == "purge") | .version')
+          if [ "$TAG" != "v$version" ]; then
+            echo "release $TAG does not match Cargo.toml version $version" >&2
+            exit 1
+          fi
+      - name: Publish to crates.io
+        run: cargo publish --workspace --locked
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}

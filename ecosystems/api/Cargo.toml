@@ -1,0 +1,19 @@
+[package]
+name = "purge-ecosystem"
+description = "The Ecosystem trait implemented by every supported project kind"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+
+[dependencies]
+purge-process.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lints]
+workspace = true

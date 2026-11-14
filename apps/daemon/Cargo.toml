@@ -1,0 +1,28 @@
+[package]
+name = "purge-daemon"
+description = "The background loop of purge: scheduling, idle checks and notifications"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+ctrlc.workspace = true
+jiff.workspace = true
+purge-config.workspace = true
+purge-engine.workspace = true
+purge-notify.workspace = true
+purge-process.workspace = true
+purge-session.workspace = true
+tracing.workspace = true
+tracing-appender.workspace = true
+tracing-subscriber.workspace = true
+
+[dev-dependencies]
+purge-ecosystem.workspace = true
+
+[lints]
+workspace = true

@@ -1,0 +1,24 @@
+[package]
+name = "purge-engine"
+description = "Decides what to clean and carries it out"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+
+[dependencies]
+bytesize.workspace = true
+purge-config.workspace = true
+purge-ecosystem.workspace = true
+purge-process.workspace = true
+purge-scan.workspace = true
+purge-state.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lints]
+workspace = true

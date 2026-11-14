@@ -1,0 +1,16 @@
+[package]
+name = "purge-service"
+description = "Registers the purge daemon to start at login"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+
+[dependencies]
+directories.workspace = true
+thiserror.workspace = true
+
+[lints]
+workspace = true

@@ -1,0 +1,68 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  check:
+    name: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - name: Format
+        if: matrix.os == 'ubuntu-latest'
+        run: cargo fmt --all --check
+      - name: Lint
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      - name: Test
+        run: cargo test --workspace --locked
+      - name: Docs
+        run: cargo doc --workspace --no-deps --document-private-items --locked
+        env:
+          RUSTDOCFLAGS: -D warnings
+      - name: Package
+        if: matrix.os == 'ubuntu-latest'
+        run: cargo package --workspace --locked
+
+  # Builds the Linux packages on every push, so packaging problems show up
+  # long before a release, and checks the .deb installs and runs.
+  linux-packages:
+    runs-on: ubuntu-latest
+    env:
+      TARGET: x86_64-unknown-linux-gnu
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install packaging tools
+        run: cargo install --locked cargo-deb@3.8.0 cargo-generate-rpm@0.21.1
+      - name: Build
+        run: cargo build --release --locked --package purge --target "$TARGET"
+      - name: Package
+        run: scripts/package-linux.sh "$TARGET"
+      - name: Inspect
+        run: |
+          sudo apt-get install -y rpm > /dev/null
+          dpkg-deb --info target/$TARGET/debian/*.deb
+          dpkg-deb --contents target/$TARGET/debian/*.deb
+          rpm -qip target/$TARGET/generate-rpm/*.rpm
+          rpm -qlp target/$TARGET/generate-rpm/*.rpm
+      - name: Install the .deb and run it
+        run: |
+          sudo apt-get install -y ./target/$TARGET/debian/*.deb
+          purge --version
+          purge-rs --version
+          test -x /usr/bin/purged

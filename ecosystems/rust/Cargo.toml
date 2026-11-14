@@ -1,0 +1,23 @@
+[package]
+name = "purge-rust"
+description = "Rust/Cargo ecosystem support"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+
+[dependencies]
+dunce.workspace = true
+purge-ecosystem.workspace = true
+purge-process.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lints]
+workspace = true

@@ -1,0 +1,80 @@
+[package]
+name = "purge"
+description = "Reclaims disk space from stale build artifacts (Rust target/ folders), running in the background"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+readme = "../../README.md"
+keywords = ["cargo", "clean", "disk-space", "target", "build-artifacts"]
+categories = ["command-line-utilities", "development-tools", "filesystem"]
+
+[lib]
+name = "purge_cli"
+
+[[bin]]
+name = "purge"
+path = "src/main.rs"
+
+[[bin]]
+name = "purge-rs"
+path = "src/bin/purge-rs.rs"
+
+[[bin]]
+name = "purged"
+path = "src/bin/purged.rs"
+
+[dependencies]
+anyhow.workspace = true
+clap.workspace = true
+dunce.workspace = true
+jiff.workspace = true
+purge-config.workspace = true
+purge-daemon.workspace = true
+purge-ecosystem.workspace = true
+purge-ecosystems.workspace = true
+purge-engine.workspace = true
+purge-process.workspace = true
+purge-service.workspace = true
+purge-session.workspace = true
+purge-state.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+
+[lints]
+workspace = true
+
+# `cargo deb` (Debian/Ubuntu) and `cargo generate-rpm` (Fedora/RHEL/openSUSE)
+# packages, built for every release. Paths starting with `target/release/`
+# point at the binaries of the target being packaged.
+[package.metadata.deb]
+name = "purge"
+maintainer = "iMohmmedSA <81385827+iMohmmedSA@users.noreply.github.com>"
+section = "utils"
+priority = "optional"
+extended-description = """\
+purge watches the folders where your projects live and reclaims disk space \
+from stale build artifacts in the background, removing only what build tools \
+can recreate. Experimental: use at your own risk."""
+assets = [
+    ["target/release/purge", "usr/bin/", "755"],
+    ["target/release/purge-rs", "usr/bin/", "755"],
+    ["target/release/purged", "usr/bin/", "755"],
+    ["../../README.md", "usr/share/doc/purge/", "644"],
+    ["../../LICENSE-MIT", "usr/share/doc/purge/", "644"],
+    ["../../LICENSE-APACHE", "usr/share/doc/purge/", "644"],
+]
+
+[package.metadata.generate-rpm]
+name = "purge"
+assets = [
+    { source = "target/release/purge", dest = "/usr/bin/purge", mode = "755" },
+    { source = "target/release/purge-rs", dest = "/usr/bin/purge-rs", mode = "755" },
+    { source = "target/release/purged", dest = "/usr/bin/purged", mode = "755" },
+    { source = "../../README.md", dest = "/usr/share/doc/purge/README.md", mode = "644", doc = true },
+    { source = "../../LICENSE-MIT", dest = "/usr/share/licenses/purge/LICENSE-MIT", mode = "644", doc = true },
+    { source = "../../LICENSE-APACHE", dest = "/usr/share/licenses/purge/LICENSE-APACHE", mode = "644", doc = true },
+]

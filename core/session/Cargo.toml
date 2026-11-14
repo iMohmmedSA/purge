@@ -1,0 +1,23 @@
+[package]
+name = "purge-session"
+description = "Runs purge against the user's configuration and saved state"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+
+[dependencies]
+purge-config.workspace = true
+purge-ecosystems.workspace = true
+purge-engine.workspace = true
+purge-state.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lints]
+workspace = true

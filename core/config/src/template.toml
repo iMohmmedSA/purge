@@ -1,0 +1,93 @@
+# purge configuration
+#
+# Durations: "30m", "6h", "14d", "2weeks". Sizes: "500 MB", "2 GiB".
+# Paths may start with "~". Path patterns are either a folder (matches
+# everything inside it) or a glob such as "~/Dev/*/vendor"; "**/vendor"
+# matches a folder name anywhere.
+
+# Folders searched for projects.
+roots = []
+
+# Folders never searched.
+exclude = []
+
+# How many directory levels below each root are searched.
+max_depth = 6
+
+[schedule]
+# Time between two runs.
+interval = "6h"
+# Wait after login before the first run.
+startup_delay = "2m"
+# When a run is due but postponed (outside the window, machine busy), check
+# again after this long.
+retry_after = "30m"
+# Only run inside this local time window. Leave unset to run any time.
+# window = "22:00-06:00"
+# Postpone while overall CPU usage is above this percentage (100 = never).
+max_cpu_percent = 30
+# Rebuilds are the expensive part; cap them per run.
+max_rebuilds = 2
+
+[notify]
+# Desktop notification after a run that freed space or hit errors.
+enabled = true
+
+# Defaults for every project.
+#
+# Per project, purge looks at two clocks: when its sources last changed (or
+# a git commit/checkout happened) and when each profile (debug, release, ...)
+# was last built. Rules are checked in this order:
+#
+#   1. Dormant: no source change or build for `dormant_after`
+#      -> remove all build output. Nothing is rebuilt.
+#   2. Unused profile: a profile not built for `max_age`
+#      -> remove that profile. Nothing is rebuilt.
+#   3. Stale builds: inside a profile still in use, builds not used for
+#      `max_age` (an old dependency version, feature set or compiler) once
+#      they add up to `min_savings` -> remove just those. Nothing is
+#      rebuilt, and the builds in use stay, so your next build is as fast.
+#   4. Bloated profile: still in use, but at least `bloat_factor` times its
+#      size after the last fresh build, and cleaning saves `min_savings`
+#      -> clean and rebuild it at low priority, so it is ready and smaller.
+#      The fresh size is learned for free: after purge cleans a profile,
+#      it records the size of your next build, and after a rebuild, your
+#      next build adds what it left out (tests, examples). A profile with no
+#      recorded size is only rebuilt to measure it if it is
+#      `learn_rebuild_above`.
+#
+# Build output shared by several projects (a `CARGO_TARGET_DIR` or
+# `build.target-dir` outside the project) is cleaned only when every project
+# using it allows it, and is never rebuilt.
+[policy]
+dormant_after = "14d"
+max_age = "14d"
+# Remove stale builds inside profiles still in use (rule 3).
+trim = true
+rebuild = true
+bloat_factor = 1.5
+min_savings = "500 MB"
+learn_rebuild_above = "5 GB"
+# Never rebuild the same profile more often than this.
+refresh_cooldown = "7d"
+# Never rebuild a project edited or built more recently than this.
+quiet_period = "1h"
+# Extra arguments for the rebuild (`cargo build --profile <p> ...`).
+build_args = ["--workspace"]
+
+# Per-profile overrides of `max_age` and `rebuild`.
+# [policy.profiles.release]
+# max_age = "30d"
+# rebuild = false
+
+# Overrides for particular projects or folders, applied in order. Any
+# [policy] key can appear here, plus `skip = true` to leave a project alone.
+#
+# [[project]]
+# path = "~/Dev/big-game"
+# dormant_after = "60d"
+# build_args = ["--workspace", "--all-features"]
+#
+# [[project]]
+# path = "~/Dev/clients/**"
+# skip = true

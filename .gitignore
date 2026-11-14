@@ -1,0 +1,32 @@
+# Build output. Cargo.lock is committed on purpose: purge ships binaries,
+# and CI and releases build with --locked.
+target/
+
+# rustfmt backups and profiling/coverage data
+**/*.rs.bk
+*.profraw
+*.profdata
+lcov.info
+
+# Release archives, if the release packaging is run locally
+/purge-v*
+
+# Secrets must never be committed
+.env
+.env.*
+*.pem
+*.key
+
+# Editors and IDEs
+.idea/
+.vscode/
+.zed/
+.fleet/
+*.swp
+*.swo
+*~
+
+# Operating systems
+.DS_Store
+Thumbs.db
+desktop.ini

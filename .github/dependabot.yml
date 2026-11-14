@@ -1,0 +1,15 @@
+# Weekly pull requests for new versions of crates and GitHub Actions, and
+# immediate ones for security fixes, keeping every dependency current.
+version: 2
+updates:
+  - package-ecosystem: cargo
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      crates:
+        patterns: ["*"]
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly

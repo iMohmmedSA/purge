@@ -76,7 +76,7 @@ impl PathMatcher {
         // never match. `**/name` is the way to match a name anywhere.
         if !expanded.is_absolute() && !pattern.starts_with("**") {
             return Err(Error::Invalid(format!(
-                "path pattern `{pattern}` must start with `/`, `~` or `**` (e.g. `**/{pattern}`)"
+                "path pattern `{pattern}` must be an absolute path, or start with `~` or `**` (e.g. `**/{pattern}`)"
             )));
         }
         if !pattern.contains(['*', '?', '[', '{']) {
@@ -102,9 +102,22 @@ impl PathMatcher {
 
 #[cfg(test)]
 mod tests {
-    use std::time::Duration;
+    use std::{path::PathBuf, time::Duration};
 
     use super::*;
+
+    /// An absolute path on this system: Windows needs a drive letter.
+    fn abs(path: &str) -> String {
+        if cfg!(windows) {
+            format!("C:{path}")
+        } else {
+            path.to_owned()
+        }
+    }
+
+    fn at(path: &str) -> PathBuf {
+        PathBuf::from(abs(path))
+    }
 
     fn resolver(toml: &str) -> Resolver {
         Resolver::new(&Config::parse(toml).unwrap()).unwrap()
@@ -112,41 +125,41 @@ mod tests {
 
     #[test]
     fn rules_apply_in_order_on_top_of_defaults() {
-        let resolver = resolver(
+        let resolver = resolver(&format!(
             r#"
             [policy]
             max_age = "5d"
             [[project]]
-            path = "/dev/work"
+            path = "{}"
             max_age = "20d"
             [[project]]
-            path = "/dev/work/legacy"
+            path = "{}"
             skip = true
             "#,
-        );
+            abs("/dev/work"),
+            abs("/dev/work/legacy"),
+        ));
         let day = Duration::from_hours(24);
-        assert_eq!(resolver.policy_for(Path::new("/dev/play")).max_age, 5 * day);
-        assert_eq!(
-            resolver.policy_for(Path::new("/dev/work/api")).max_age,
-            20 * day
-        );
-        let legacy = resolver.policy_for(Path::new("/dev/work/legacy"));
+        assert_eq!(resolver.policy_for(&at("/dev/play")).max_age, 5 * day);
+        assert_eq!(resolver.policy_for(&at("/dev/work/api")).max_age, 20 * day);
+        let legacy = resolver.policy_for(&at("/dev/work/legacy"));
         assert!(legacy.skip);
         assert_eq!(legacy.max_age, 20 * day);
         // Prefix matching is by component, not by string.
-        assert_eq!(
-            resolver.policy_for(Path::new("/dev/workshop")).max_age,
-            5 * day
-        );
+        assert_eq!(resolver.policy_for(&at("/dev/workshop")).max_age, 5 * day);
     }
 
     #[test]
     fn excludes_by_prefix_and_glob() {
-        let resolver = resolver(r#"exclude = ["/dev/vendor", "/dev/*/third_party"]"#);
-        assert!(resolver.is_excluded(Path::new("/dev/vendor/x")));
-        assert!(resolver.is_excluded(Path::new("/dev/app/third_party")));
-        assert!(!resolver.is_excluded(Path::new("/dev/a/b/third_party")));
-        assert!(!resolver.is_excluded(Path::new("/dev/app")));
+        let resolver = resolver(&format!(
+            r#"exclude = ["{}", "{}"]"#,
+            abs("/dev/vendor"),
+            abs("/dev/*/third_party"),
+        ));
+        assert!(resolver.is_excluded(&at("/dev/vendor/x")));
+        assert!(resolver.is_excluded(&at("/dev/app/third_party")));
+        assert!(!resolver.is_excluded(&at("/dev/a/b/third_party")));
+        assert!(!resolver.is_excluded(&at("/dev/app")));
     }
 
     #[test]
@@ -160,7 +173,7 @@ mod tests {
         );
 
         let anywhere = resolver(r#"exclude = ["**/vendor"]"#);
-        assert!(anywhere.is_excluded(Path::new("/dev/app/vendor")));
+        assert!(anywhere.is_excluded(&at("/dev/app/vendor")));
     }
 
     #[test]

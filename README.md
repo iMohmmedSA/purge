@@ -247,7 +247,10 @@ purge service install                   # restarts the service on the new binary
    and attaches them to a **draft** release. It refuses a tag that does not
    match the version.
 3. Review the draft on GitHub and publish it. Publishing runs the publish
-   workflow, which uploads every crate to crates.io after you approve it.
+   workflow, which uploads every crate to crates.io after you approve it
+   (`scripts/publish-crates.sh`: one crate at a time, dependencies first,
+   waiting out crates.io's limit on new crates, so the very first release
+   takes over an hour).
    The token lives in the `crates-io` environment as `CARGO_REGISTRY_TOKEN`
    (a crates.io token with the publish-new and publish-update scopes,
    limited to `purge*`). Publishing cannot be undone.

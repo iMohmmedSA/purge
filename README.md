@@ -18,63 +18,33 @@ It runs on Linux, macOS and Windows. Each kind of project is handled by an
 
 ## Install
 
-purge installs three commands: `purge`, the same tool as `purge-rs`, and
-`purged`, the background daemon. Keep them in the same folder: `purge
-service install` starts the `purged` next to it.
-
-### With Cargo (Linux, macOS, Windows)
-
-With [Rust](https://rustup.rs) installed:
+**Linux and macOS:**
 
 ```sh
-cargo install --locked purge
+curl -LsSf https://github.com/iMohmmedSA/purge/releases/latest/download/install.sh | sh
 ```
 
-### Prebuilt binaries
-
-Each [GitHub release](https://github.com/iMohmmedSA/purge/releases) has an
-archive for each system:
-
-| System | File |
-|---|---|
-| Linux, x86_64 | `purge-v<version>-x86_64-unknown-linux-gnu.tar.gz` |
-| Linux, ARM64 | `purge-v<version>-aarch64-unknown-linux-gnu.tar.gz` |
-| macOS, Apple Silicon | `purge-v<version>-aarch64-apple-darwin.tar.gz` |
-| macOS, Intel | `purge-v<version>-x86_64-apple-darwin.tar.gz` |
-| Windows, x86_64 | `purge-v<version>-x86_64-pc-windows-msvc.zip` |
-
-**Linux and macOS:** unpack it and move the three commands to a folder on
-your `PATH`, such as `~/.local/bin`:
-
-```sh
-tar xzf purge-v<version>-<system>.tar.gz
-mkdir -p ~/.local/bin
-mv purge-v<version>-<system>/purge purge-v<version>-<system>/purge-rs purge-v<version>-<system>/purged ~/.local/bin/
-```
-
-**Windows:** unpack it and add the folder to your user `PATH`, in
-PowerShell:
+**Windows** (PowerShell):
 
 ```powershell
-$dir = "$env:LOCALAPPDATA\Programs\purge"
-Expand-Archive purge-v<version>-x86_64-pc-windows-msvc.zip -DestinationPath $env:TEMP\purge
-New-Item -ItemType Directory -Force $dir | Out-Null
-Move-Item -Force $env:TEMP\purge\purge-*\*.exe $dir
-$path = [Environment]::GetEnvironmentVariable("Path", "User")
-[Environment]::SetEnvironmentVariable("Path", "$path;$dir", "User")
+powershell -ExecutionPolicy Bypass -c "irm https://github.com/iMohmmedSA/purge/releases/latest/download/install.ps1 | iex"
 ```
 
-Open a new terminal afterwards so the new `PATH` applies.
+The installer downloads the latest release for your system, checks its
+checksum, and installs three commands: `purge`, the same tool as
+`purge-rs`, and `purged`, the background daemon. They go into
+`~/.local/bin` (on Windows, `%LOCALAPPDATA%\Programs\purge`, which is added
+to your `PATH`).
 
-### Linux packages
+**Other ways:**
 
-Each release also has `.deb` and `.rpm` packages, which install the
-commands into `/usr/bin`:
-
-```sh
-sudo apt install ./purge_<version>-1_amd64.deb       # Debian, Ubuntu
-sudo dnf install ./purge-<version>-1.x86_64.rpm      # Fedora, RHEL
-```
+- With [Rust](https://rustup.rs): `cargo install --locked purge`
+- Debian and Ubuntu: `sudo apt install ./purge_<version>-1_amd64.deb`, and
+  Fedora and RHEL: `sudo dnf install ./purge-<version>-1.x86_64.rpm`, with
+  the package from the [latest release](https://github.com/iMohmmedSA/purge/releases/latest)
+- Or download an archive from the
+  [releases page](https://github.com/iMohmmedSA/purge/releases) and put the
+  three commands on your `PATH`, side by side
 
 ## Quick start
 

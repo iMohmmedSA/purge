@@ -1,7 +1,9 @@
 # Push a tag such as `v0.1.0` (matching the version in Cargo.toml) to build
 # binaries for every platform, plus .deb and .rpm packages for Linux, and
-# attach them to a draft GitHub release. Review the draft, then publish it:
-# publishing triggers publish.yml, which uploads the crates to crates.io.
+# attach them to a draft GitHub release with the install scripts. Each
+# installer is then tried on a real Linux, macOS and Windows machine against
+# the draft's files. Review the draft, then publish it: publishing triggers
+# publish.yml, which uploads the crates to crates.io.
 name: Release
 
 on:
@@ -30,7 +32,9 @@ jobs:
       - name: Create draft release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" --draft --verify-tag --generate-notes --title "$GITHUB_REF_NAME"
+        run: |
+          gh release create "$GITHUB_REF_NAME" --draft --verify-tag --generate-notes --title "$GITHUB_REF_NAME"
+          gh release upload "$GITHUB_REF_NAME" install.sh install.ps1
 
   build:
     needs: draft
@@ -94,3 +98,45 @@ jobs:
             sha256sum "$package" > "$package.sha256"
             gh release upload "$GITHUB_REF_NAME" "$package" "$package.sha256"
           done
+
+  # Runs each installer the way users will, against this draft's files
+  # (served locally, since a draft is not public yet), on every system.
+  installers:
+    needs: build
+    name: install on ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, ubuntu-24.04-arm, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    env:
+      GH_TOKEN: ${{ github.token }}
+      PURGE_VERSION: ${{ github.ref_name }}
+      PURGE_DOWNLOAD_URL: http://127.0.0.1:8765
+    steps:
+      - uses: actions/checkout@v7
+      - name: Serve the draft's files
+        shell: bash
+        run: |
+          mkdir -p "site/download/$GITHUB_REF_NAME"
+          gh release download "$GITHUB_REF_NAME" --dir "site/download/$GITHUB_REF_NAME"
+          python=$(command -v python3 || command -v python)
+          "$python" -m http.server 8765 --bind 127.0.0.1 --directory site > /dev/null 2>&1 &
+          sleep 2
+      - name: install.sh
+        if: runner.os != 'Windows'
+        run: |
+          sh install.sh
+          ~/.local/bin/purge --version
+          ~/.local/bin/purge-rs --version
+          test -x ~/.local/bin/purged
+      - name: install.ps1
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          ./install.ps1
+          $dir = Join-Path $env:LOCALAPPDATA 'Programs\purge'
+          & (Join-Path $dir 'purge.exe') --version
+          & (Join-Path $dir 'purge-rs.exe') --version
+          if (-not (Test-Path (Join-Path $dir 'purged.exe'))) { throw 'purged.exe missing' }
+          if (([Environment]::GetEnvironmentVariable('Path', 'User') -split ';') -notcontains $dir) { throw 'not added to PATH' }

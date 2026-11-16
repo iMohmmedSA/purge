@@ -1,14 +1,17 @@
 #!/bin/sh
-# Installs purge on Linux or macOS:
+# Installs or updates purge on Linux or macOS:
 #
 #   curl -LsSf https://github.com/iMohmmedSA/purge/releases/latest/download/install.sh | sh
 #
 # Downloads the release archive for this system, checks its SHA-256, and
-# puts `purge`, `purge-rs` and `purged` into ~/.local/bin.
+# puts `purge`, `purge-rs` and `purged` into ~/.local/bin. Run it again to
+# update: if the background service is installed, it is restarted on the
+# new version.
 #
 # Optional settings:
 #   PURGE_VERSION=v0.1.0      install this release instead of the latest
 #   PURGE_INSTALL_DIR=<dir>   install here instead of ~/.local/bin
+#   PURGE_FORCE=1             reinstall even if this version is installed
 set -eu
 
 REPO="iMohmmedSA/purge"
@@ -62,6 +65,28 @@ sha256() {
     fi
 }
 
+# The version of the purge installed in $INSTALL_DIR, like `0.1.0`.
+installed_version() {
+    [ -x "$INSTALL_DIR/purge" ] || return 0
+    "$INSTALL_DIR/purge" --version 2> /dev/null | sed -n 's/^purge //p'
+}
+
+# Other purge installations on the PATH, which may run instead of this one.
+# Only folders holding `purged` or `purge-rs` count: macOS has a `purge` of
+# its own, which is never run or reported.
+warn_other_copies() {
+    old_ifs=$IFS
+    IFS=:
+    for dir in $PATH; do
+        [ -n "$dir" ] && [ "$dir" != "$INSTALL_DIR" ] || continue
+        if [ -x "$dir/purged" ] || [ -x "$dir/purge-rs" ]; then
+            say "warning: another purge is installed in $dir and may run instead;"
+            say "  remove it (\`cargo uninstall purge\` if Cargo installed it)"
+        fi
+    done
+    IFS=$old_ifs
+}
+
 main() {
     need curl
     need tar
@@ -70,7 +95,18 @@ main() {
     target=$(target)
     version="${PURGE_VERSION:-$(latest_version)}"
     name="purge-$version-$target"
-    say "installing $version for $target into $INSTALL_DIR"
+    previous=$(installed_version)
+    if [ "v$previous" = "$version" ] && [ -z "${PURGE_FORCE:-}" ]; then
+        say "purge $previous is already installed and up to date"
+        exit 0
+    fi
+    if [ "v$previous" = "$version" ]; then
+        say "reinstalling purge $previous in $INSTALL_DIR"
+    elif [ -n "$previous" ]; then
+        say "updating purge $previous to ${version#v} in $INSTALL_DIR"
+    else
+        say "installing purge ${version#v} for $target into $INSTALL_DIR"
+    fi
 
     tmp=$(mktemp -d)
     trap 'rm -rf "$tmp"' EXIT
@@ -88,10 +124,26 @@ main() {
     for bin in purge purge-rs purged; do
         install -m 755 "$tmp/$name/$bin" "$INSTALL_DIR/$bin"
     done
-    say "installed purge, purge-rs and purged"
+    if [ -n "$previous" ] && [ "v$previous" != "$version" ]; then
+        say "updated purge $previous to ${version#v}"
+    else
+        say "installed purge, purge-rs and purged"
+    fi
+
+    # A running service keeps the old version until it restarts; installing
+    # it again points it at these files and restarts it.
+    status=$("$INSTALL_DIR/purge" service status 2> /dev/null || true)
+    if [ -n "$status" ] && [ "$status" != "not installed" ]; then
+        if "$INSTALL_DIR/purge" service install > /dev/null 2>&1; then
+            say "restarted the background service on ${version#v}"
+        else
+            say "warning: could not restart the background service; run \`purge service install\`"
+        fi
+    fi
+    warn_other_copies
 
     case ":$PATH:" in
-        *":$INSTALL_DIR:"*) say "get started: purge config init ~/Dev" ;;
+        *":$INSTALL_DIR:"*) [ -n "$previous" ] || say "get started: purge config init ~/Dev" ;;
         *)
             say "$INSTALL_DIR is not on your PATH; add this line to your shell profile:"
             printf '\n    export PATH="%s:$PATH"\n\n' "$INSTALL_DIR"

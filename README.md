@@ -37,6 +37,10 @@ checksum, and installs three commands: `purge`, the same tool as
 `~/.local/bin` (on Windows, `%LOCALAPPDATA%\Programs\purge`, which is added
 to your `PATH`).
 
+**To update**, run the same command again. It installs the latest release,
+or says you already have it, and restarts the background service on the
+new version if you installed it.
+
 **Other ways:**
 
 - With [Rust](https://rustup.rs): `cargo install --locked purge`
@@ -205,6 +209,34 @@ More ecosystems are planned. Each one is a separate crate; see
 | `purge config init/show/path` | Manage the configuration |
 | `purge service install/uninstall/status` | Background service (systemd user unit, launchd agent, or login entry on Windows) |
 | `purge daemon` | Run the background loop in the foreground |
+
+## Uninstall
+
+1. Stop and remove the background service, if you installed it:
+
+   ```sh
+   purge service uninstall
+   ```
+
+2. Remove the commands, the same way you installed them:
+
+   | Installed with | Remove with |
+   |---|---|
+   | the installer, Linux and macOS | `rm ~/.local/bin/purge ~/.local/bin/purge-rs ~/.local/bin/purged` |
+   | the installer, Windows | `Remove-Item -Recurse "$env:LOCALAPPDATA\Programs\purge"`, then remove that folder from your user `PATH` (Settings → "Edit environment variables for your account") |
+   | Cargo | `cargo uninstall purge` |
+   | the `.deb` / `.rpm` package | `sudo apt remove purge` / `sudo dnf remove purge` |
+
+3. Optionally, delete purge's settings and history:
+
+   | System | Folders |
+   |---|---|
+   | Linux | `rm -rf ~/.config/purge ~/.local/share/purge` |
+   | macOS | `rm -rf ~/Library/Application\ Support/purge` |
+   | Windows | `Remove-Item -Recurse "$env:APPDATA\purge"` |
+
+Nothing else is left behind: purge only ever removed build output, so your
+projects need nothing undone.
 
 ## Layout
 

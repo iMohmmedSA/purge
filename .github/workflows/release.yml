@@ -130,6 +130,9 @@ jobs:
           ~/.local/bin/purge --version
           ~/.local/bin/purge-rs --version
           test -x ~/.local/bin/purged
+          # Running it again is how users update.
+          sh install.sh | tee again.txt
+          grep -q "already installed and up to date" again.txt
       - name: install.ps1
         if: runner.os == 'Windows'
         shell: pwsh
@@ -140,3 +143,7 @@ jobs:
           & (Join-Path $dir 'purge-rs.exe') --version
           if (-not (Test-Path (Join-Path $dir 'purged.exe'))) { throw 'purged.exe missing' }
           if (([Environment]::GetEnvironmentVariable('Path', 'User') -split ';') -notcontains $dir) { throw 'not added to PATH' }
+          # Running it again is how users update.
+          $again = ./install.ps1 6>&1 | Out-String
+          Write-Host $again
+          if ($again -notmatch 'already installed and up to date') { throw 'second run did not see the installed version' }

@@ -161,13 +161,24 @@ main() {
     fi
     warn_other_copies
 
+    # macOS has a `purge` of its own: there, use `purge-rs`, and add the
+    # folder after everything else so Apple's command stays as it is.
+    if [ "$(uname -s)" = Darwin ]; then
+        command=purge-rs
+        path_line="export PATH=\"\$PATH:$INSTALL_DIR\""
+    else
+        command=purge
+        path_line="export PATH=\"$INSTALL_DIR:\$PATH\""
+    fi
     case ":$PATH:" in
-        *":$INSTALL_DIR:"*) [ -n "$previous" ] || say "get started: purge config init ~/Dev" ;;
+        *":$INSTALL_DIR:"*) ;;
         *)
             say "$INSTALL_DIR is not on your PATH; add this line to your shell profile:"
-            printf '\n    export PATH="%s:$PATH"\n\n' "$INSTALL_DIR"
+            printf '\n    %s\n\n' "$path_line"
             ;;
     esac
+    [ "$command" = purge ] || say "on macOS, use \`purge-rs\`: macOS has a \`purge\` of its own"
+    [ -n "$previous" ] || say "get started: $command config init ~/Dev"
 }
 
 main "$@"

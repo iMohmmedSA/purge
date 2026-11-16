@@ -62,12 +62,13 @@ purge scan                         # preview: what would happen right now
 purge service install              # run in the background, starting at login
 ```
 
-**macOS:** macOS has a `purge` command of its own, so use `purge-rs`, the
-same tool under a name nothing else uses. The first line puts
-`~/.local/bin`, where the installer puts it, on your `PATH`:
+**macOS:** macOS has a `purge` command of its own, which stays as it is:
+use `purge-rs`, the same tool under a name nothing else uses. The first
+line adds `~/.local/bin`, where the installer puts it, to the end of your
+`PATH`, so it adds `purge-rs` without replacing anything:
 
 ```sh
-echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zprofile && source ~/.zprofile
+echo 'export PATH="$PATH:$HOME/.local/bin"' >> ~/.zprofile && source ~/.zprofile
 purge-rs config init ~/Dev         # choose the folders to watch
 purge-rs scan                      # preview: what would happen right now
 purge-rs service install           # run in the background, starting at login

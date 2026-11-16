@@ -54,11 +54,26 @@ with `cargo install`, so only one copy is ever on your `PATH`.
 
 ## Quick start
 
+**Linux and Windows:**
+
 ```sh
 purge config init ~/Dev            # choose the folders to watch
 purge scan                         # preview: what would happen right now
 purge service install              # run in the background, starting at login
 ```
+
+**macOS:** macOS has a `purge` command of its own, so use `purge-rs`, the
+same tool under a name nothing else uses. The first line puts
+`~/.local/bin`, where the installer puts it, on your `PATH`:
+
+```sh
+echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zprofile && source ~/.zprofile
+purge-rs config init ~/Dev         # choose the folders to watch
+purge-rs scan                      # preview: what would happen right now
+purge-rs service install           # run in the background, starting at login
+```
+
+Every other `purge` command in this README works as `purge-rs` too.
 
 ## How it works
 

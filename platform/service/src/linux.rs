@@ -51,6 +51,9 @@ fn unit(spec: &Spec) -> String {
             quote(&format!("PATH={}", path.to_string_lossy()))
         );
     }
+    // A run asked to stop finishes the deletion under way first; allow for
+    // a large one rather than systemd's default 90 seconds.
+    let _ = writeln!(unit, "TimeoutStopSec=5min");
     let _ = writeln!(unit, "Restart=on-failure");
     let _ = writeln!(unit, "RestartSec=60");
     let _ = writeln!(unit, "Nice=10");
@@ -88,6 +91,14 @@ pub(crate) fn uninstall() -> Result<String, Error> {
     Ok(format!("stopped and removed {}", path.display()))
 }
 
+pub(crate) fn stop() -> Result<String, Error> {
+    if !unit_path()?.exists() {
+        return Ok("service is not installed".into());
+    }
+    run(&mut systemctl(&["stop", &unit_name()]))?;
+    Ok("stopped the systemd user unit".into())
+}
+
 pub(crate) fn status() -> Result<String, Error> {
     let path = unit_path()?;
     if !path.exists() {
@@ -111,5 +122,6 @@ mod tests {
         });
         assert!(unit.contains("ExecStart=\"/home/me/.cargo/bin/purged\" \"--x\""));
         assert!(unit.contains("Environment=\"PATH=/usr/bin:/home/me/50%%\""));
+        assert!(unit.contains("TimeoutStopSec=5min"));
     }
 }

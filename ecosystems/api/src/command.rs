@@ -2,7 +2,7 @@
 
 use std::{
     io::Read,
-    process::{Child, Command, Output, Stdio},
+    process::{Child, Command, ExitStatus, Output, Stdio},
     thread::{self, JoinHandle},
     time::{Duration, Instant},
 };
@@ -18,7 +18,8 @@ const MAX_POLL: Duration = Duration::from_millis(250);
 
 /// Runs `cmd` to completion, failing with its stderr if it exits
 /// unsuccessfully. A command still running after `timeout` is killed, so a
-/// hung tool can never stall purge.
+/// hung tool can never stall purge; so is one running when purge is asked
+/// to stop.
 pub fn run(cmd: &mut Command, timeout: Duration) -> Result<Output> {
     let mut child = cmd
         .stdin(Stdio::null())
@@ -28,13 +29,21 @@ pub fn run(cmd: &mut Command, timeout: Duration) -> Result<Output> {
     // Read both pipes while waiting, so a chatty tool never blocks on a full one.
     let stdout = drain(child.stdout.take());
     let stderr = drain(child.stderr.take());
-    let Some(status) = wait(&mut child, timeout)? else {
-        // Leave the readers behind: the tool's own children may keep the
-        // pipes open for a while after it is killed.
-        return Err(Error::Timeout {
-            command: describe(cmd),
-            after: timeout,
-        });
+    // On being killed, leave the readers behind: the tool's own children
+    // may keep the pipes open for a while.
+    let status = match wait(&mut child, timeout)? {
+        Ended::Exited(status) => status,
+        Ended::TimedOut => {
+            return Err(Error::Timeout {
+                command: describe(cmd),
+                after: timeout,
+            });
+        }
+        Ended::Stopped => {
+            return Err(Error::Stopped {
+                command: describe(cmd),
+            });
+        }
     };
     let output = Output {
         status,
@@ -51,22 +60,37 @@ pub fn run(cmd: &mut Command, timeout: Duration) -> Result<Output> {
     })
 }
 
-/// Waits for `child` to exit, killing it after `timeout` (then `None`).
-fn wait(child: &mut Child, timeout: Duration) -> Result<Option<std::process::ExitStatus>> {
+/// How waiting for a command ended.
+enum Ended {
+    Exited(ExitStatus),
+    /// Killed: still running after the time limit.
+    TimedOut,
+    /// Killed: purge was asked to stop.
+    Stopped,
+}
+
+/// Waits for `child` to exit, killing it after `timeout` or when purge is
+/// asked to stop.
+fn wait(child: &mut Child, timeout: Duration) -> Result<Ended> {
     let deadline = Instant::now() + timeout;
     let mut pause = Duration::from_millis(1);
     loop {
         if let Some(status) = child.try_wait()? {
-            return Ok(Some(status));
+            return Ok(Ended::Exited(status));
         }
         let now = Instant::now();
-        if now >= deadline {
-            child.kill()?;
-            child.wait()?;
-            return Ok(None);
-        }
-        thread::sleep(pause.min(deadline - now));
-        pause = (pause * 2).min(MAX_POLL);
+        let ended = if purge_process::stop_requested() {
+            Ended::Stopped
+        } else if now >= deadline {
+            Ended::TimedOut
+        } else {
+            thread::sleep(pause.min(deadline - now));
+            pause = (pause * 2).min(MAX_POLL);
+            continue;
+        };
+        child.kill()?;
+        child.wait()?;
+        return Ok(ended);
     }
 }
 

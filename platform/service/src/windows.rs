@@ -78,6 +78,17 @@ pub(crate) fn uninstall() -> Result<String, Error> {
     Ok("stopped and removed the login entry".into())
 }
 
+pub(crate) fn stop() -> Result<String, Error> {
+    let Some(line) = registered_command()? else {
+        return Ok("service is not installed".into());
+    };
+    // Windows has no polite stop for a windowless program; callers make
+    // sure no run is in progress first.
+    let program = line.split('"').nth(1).unwrap_or(&line);
+    let _ = run(Command::new("taskkill").args(["/IM", &image_name(Path::new(program)), "/F"]));
+    Ok("stopped purged".into())
+}
+
 pub(crate) fn status() -> Result<String, Error> {
     Ok(registered_command()?.map_or_else(
         || "not installed".into(),

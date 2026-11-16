@@ -4,7 +4,8 @@ use std::{
     env, fs,
     path::{Path, PathBuf},
     process::ExitCode,
-    time::SystemTime,
+    thread,
+    time::{Duration, SystemTime},
 };
 
 use anyhow::{Context as _, Result, anyhow, bail};
@@ -16,7 +17,7 @@ use purge_engine::{
 };
 use purge_process::ProcessTable;
 use purge_session::Session;
-use purge_state::Stats;
+use purge_state::{RunLock, Stats};
 
 use crate::{
     args::{ConfigCommand, ServiceCommand},
@@ -321,18 +322,44 @@ pub fn config(paths: &Paths, command: ConfigCommand) -> Result<()> {
 
 /// `purge service ...`.
 pub fn service(paths: &Paths, command: ServiceCommand) -> Result<()> {
+    if command == ServiceCommand::Status {
+        println!("{}", purge_service::status()?);
+        return Ok(());
+    }
+    if command == ServiceCommand::Install && Config::load(&paths.config_file)?.roots.is_empty() {
+        eprintln!("warning: {NO_ROOTS}; the service idles until you add some");
+    }
+    // Starting, stopping or replacing the daemon never interrupts a run:
+    // wait for it, and hold the lock meanwhile so no new run begins.
+    let _idle = wait_until_idle(&paths.lock_file(), IDLE_POLL)?;
     let message = match command {
-        ServiceCommand::Install => {
-            if Config::load(&paths.config_file)?.roots.is_empty() {
-                eprintln!("warning: {NO_ROOTS}; the service idles until you add some");
-            }
-            purge_service::install(&service_spec(paths)?)?
-        }
+        ServiceCommand::Install => purge_service::install(&service_spec(paths)?)?,
         ServiceCommand::Uninstall => purge_service::uninstall()?,
-        ServiceCommand::Status => purge_service::status()?,
+        ServiceCommand::Stop => purge_service::stop()?,
+        ServiceCommand::Status => unreachable!("handled above"),
     };
     println!("{message}");
     Ok(())
+}
+
+/// How often [`wait_until_idle`] checks again.
+const IDLE_POLL: Duration = Duration::from_secs(2);
+
+/// Takes the run lock, waiting for a run in progress to finish first.
+fn wait_until_idle(lock: &Path, poll: Duration) -> Result<RunLock> {
+    let mut told = false;
+    loop {
+        let acquired = RunLock::try_acquire(lock)
+            .with_context(|| format!("cannot take the run lock {}", lock.display()))?;
+        if let Some(lock) = acquired {
+            return Ok(lock);
+        }
+        if !told {
+            eprintln!("waiting for the current purge run to finish...");
+            told = true;
+        }
+        thread::sleep(poll);
+    }
 }
 
 /// Prefers the `purged` binary installed next to this one; falls back to
@@ -369,4 +396,27 @@ fn exit_code(report: &RunReport) -> ExitCode {
 
 fn last<T>(items: &[T], count: usize) -> &[T] {
     &items[items.len().saturating_sub(count)..]
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn waits_for_a_run_to_finish() {
+        let dir = tempfile::tempdir().unwrap();
+        let lock = dir.path().join("purge.lock");
+        let run = RunLock::try_acquire(&lock).unwrap().unwrap();
+        let started = std::time::Instant::now();
+        let finisher = thread::spawn(move || {
+            thread::sleep(Duration::from_millis(300));
+            drop(run);
+        });
+        let idle = wait_until_idle(&lock, Duration::from_millis(20)).unwrap();
+        assert!(started.elapsed() >= Duration::from_millis(300));
+        // While held, no run can start.
+        assert!(RunLock::try_acquire(&lock).unwrap().is_none());
+        drop(idle);
+        finisher.join().unwrap();
+    }
 }

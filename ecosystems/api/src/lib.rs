@@ -136,6 +136,8 @@ pub enum Error {
     },
     #[error("`{command}` did not finish within {after:?}; stopped it")]
     Timeout { command: String, after: Duration },
+    #[error("`{command}` was stopped because purge is shutting down")]
+    Stopped { command: String },
     #[error("{0}")]
     Invalid(String),
 }

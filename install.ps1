@@ -60,8 +60,14 @@ try {
 
     Expand-Archive $zip -DestinationPath $tmp
     New-Item -ItemType Directory -Force $dir | Out-Null
-    # Windows cannot replace a running program: stop the daemon first.
-    Get-Process -Name purged -ErrorAction SilentlyContinue | Stop-Process -Force
+    # Windows cannot replace a running program: stop the daemon first. From
+    # 0.2.1 on, `purge service stop` waits for a run in progress to finish;
+    # older versions lack it and are stopped outright.
+    if ($previous -and [version]$previous -ge [version]'0.2.1') {
+        & $purge service stop | Out-Null
+    } elseif ($previous) {
+        Get-Process -Name purged -ErrorAction SilentlyContinue | Stop-Process -Force
+    }
     Start-Sleep -Milliseconds 500
     foreach ($bin in 'purge', 'purge-rs', 'purged') {
         Copy-Item -Force (Join-Path $tmp "$name\$bin.exe") $dir

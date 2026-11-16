@@ -6,6 +6,7 @@ use std::{
     io,
     path::{Path, PathBuf},
     process::Command,
+    sync::atomic::{AtomicBool, Ordering},
     thread,
 };
 
@@ -14,6 +15,22 @@ use sysinfo::{
     CpuRefreshKind, MINIMUM_CPU_UPDATE_INTERVAL, ProcessRefreshKind, ProcessesToUpdate,
     RefreshKind, System, UpdateKind,
 };
+
+/// Set once purge has been asked to stop (Ctrl-C, or the service manager
+/// stopping the daemon). A signal concerns the whole process, so this is
+/// process-wide state.
+static STOP: AtomicBool = AtomicBool::new(false);
+
+/// Asks the running work to stop at its next safe point: after the current
+/// deletion, and without waiting for a running build.
+pub fn request_stop() {
+    STOP.store(true, Ordering::SeqCst);
+}
+
+/// Whether [`request_stop`] was called.
+pub fn stop_requested() -> bool {
+    STOP.load(Ordering::SeqCst)
+}
 
 /// Puts the current process into background mode.
 ///

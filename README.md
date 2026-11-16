@@ -129,6 +129,12 @@ See the comments in `purge config show`.
   configured `window`.
 - Every action is logged (`purge history`), and `purge scan` / `purge run
   --dry-run` change nothing.
+- Stopping is safe at any time. Stopping the service, logging out or
+  pressing Ctrl-C lets the deletion under way finish (never a half-deleted
+  `node_modules`), stops a running rebuild, and leaves the rest for next
+  time; a second Ctrl-C quits at once. `purge service install`,
+  `uninstall` and `stop`, and the installers, wait for a run in progress
+  to finish before touching the service.
 
 ## Supported ecosystems
 
@@ -207,7 +213,7 @@ More ecosystems are planned. Each one is a separate crate; see
 | `purge stats [--top N] [--json]` | Space freed per period, month, action and project; current build output size |
 | `purge history [-n N]` | Action log |
 | `purge config init/show/path` | Manage the configuration |
-| `purge service install/uninstall/status` | Background service (systemd user unit, launchd agent, or login entry on Windows) |
+| `purge service install/uninstall/stop/status` | Background service (systemd user unit, launchd agent, or login entry on Windows) |
 | `purge daemon` | Run the background loop in the foreground |
 
 ## Uninstall

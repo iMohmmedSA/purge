@@ -18,11 +18,14 @@ use tracing::{debug, error, info, warn};
 
 pub use logging::init_logging;
 
-/// Runs until interrupted (Ctrl-C, SIGTERM, or the service stopping).
+/// Runs until interrupted (Ctrl-C, SIGTERM, or the service stopping). A
+/// run under way stops at its next safe point first: it finishes the
+/// deletion in progress, stops a running build, and leaves the rest.
 pub fn run(paths: &Paths) -> Result<()> {
     let (stop_tx, stop) = mpsc::channel();
     let handler_tx = stop_tx.clone();
     if let Err(err) = ctrlc::set_handler(move || {
+        purge_process::request_stop();
         let _ = handler_tx.send(());
     }) {
         // Still worth running; it just cannot shut down gracefully.
@@ -32,9 +35,10 @@ pub fn run(paths: &Paths) -> Result<()> {
         warn!("cannot lower process priority: {err}");
     }
 
-    // A broken configuration must not stop the daemon: the loop below
-    // keeps retrying until it is fixed.
-    let mut schedule = Schedule::default();
+    // A broken configuration must not stop the daemon: it starts on the
+    // default schedule, and the loop below keeps retrying until it is fixed.
+    let mut schedule =
+        Session::open(paths.clone()).map_or_default(|session| session.config().schedule.clone());
     info!(config = %paths.config_file.display(), "purge daemon started");
 
     let mut delay = schedule.startup_delay;

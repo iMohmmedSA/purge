@@ -3,7 +3,7 @@ resolver = "3"
 members = ["apps/*", "core/*", "ecosystems/*", "platform/*"]
 
 [workspace.package]
-version = "0.2.0"
+version = "0.2.1"
 edition = "2024"
 rust-version = "1.100"
 license = "MIT OR Apache-2.0"
@@ -11,19 +11,19 @@ repository = "https://github.com/iMohmmedSA/purge"
 
 [workspace.dependencies]
 # Internal crates
-purge-config = { path = "core/config", version = "0.2.0" }
-purge-engine = { path = "core/engine", version = "0.2.0" }
-purge-scan = { path = "core/scan", version = "0.2.0" }
-purge-session = { path = "core/session", version = "0.2.0" }
-purge-state = { path = "core/state", version = "0.2.0" }
-purge-ecosystem = { path = "ecosystems/api", version = "0.2.0" }
-purge-ecosystems = { path = "ecosystems/all", version = "0.2.0" }
-purge-js = { path = "ecosystems/js", version = "0.2.0" }
-purge-rust = { path = "ecosystems/rust", version = "0.2.0" }
-purge-notify = { path = "platform/notify", version = "0.2.0" }
-purge-process = { path = "platform/process", version = "0.2.0" }
-purge-service = { path = "platform/service", version = "0.2.0" }
-purge-daemon = { path = "apps/daemon", version = "0.2.0" }
+purge-config = { path = "core/config", version = "0.2.1" }
+purge-engine = { path = "core/engine", version = "0.2.1" }
+purge-scan = { path = "core/scan", version = "0.2.1" }
+purge-session = { path = "core/session", version = "0.2.1" }
+purge-state = { path = "core/state", version = "0.2.1" }
+purge-ecosystem = { path = "ecosystems/api", version = "0.2.1" }
+purge-ecosystems = { path = "ecosystems/all", version = "0.2.1" }
+purge-js = { path = "ecosystems/js", version = "0.2.1" }
+purge-rust = { path = "ecosystems/rust", version = "0.2.1" }
+purge-notify = { path = "platform/notify", version = "0.2.1" }
+purge-process = { path = "platform/process", version = "0.2.1" }
+purge-service = { path = "platform/service", version = "0.2.1" }
+purge-daemon = { path = "apps/daemon", version = "0.2.1" }
 
 # External crates (latest releases)
 anyhow = "1.0.104"

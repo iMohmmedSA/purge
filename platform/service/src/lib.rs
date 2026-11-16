@@ -52,6 +52,12 @@ pub fn uninstall() -> Result<String, Error> {
     platform::uninstall()
 }
 
+/// Stops the service without removing it; it starts again at the next login
+/// or install. Returns a human-readable description.
+pub fn stop() -> Result<String, Error> {
+    platform::stop()
+}
+
 /// Describes whether the service is installed and running.
 pub fn status() -> Result<String, Error> {
     platform::status()

@@ -84,6 +84,12 @@ pub enum Command {
 }
 
 impl Command {
+    /// Whether the command removes files, so Ctrl-C should let the step
+    /// under way finish.
+    pub fn changes_files(&self) -> bool {
+        matches!(self, Self::Run { dry_run: false, .. } | Self::Clean { .. })
+    }
+
     /// Whether the command scans or cleans, and so should run as
     /// background work.
     pub fn is_heavy(&self) -> bool {
@@ -110,12 +116,16 @@ pub enum ConfigCommand {
     Show,
 }
 
-#[derive(Debug, Clone, Copy, Subcommand)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Subcommand)]
 pub enum ServiceCommand {
-    /// Install and start the background service.
+    /// Install and start the background service, or restart it on this
+    /// version.
     Install,
     /// Stop and remove the background service.
     Uninstall,
+    /// Stop the background service until the next login or install,
+    /// waiting for a run in progress to finish.
+    Stop,
     /// Show whether the service is installed and running.
     Status,
 }

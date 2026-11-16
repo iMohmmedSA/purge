@@ -54,6 +54,7 @@ fn plist(spec: &Spec) -> String {
   <key>RunAtLoad</key><true/>
   <key>KeepAlive</key><dict><key>SuccessfulExit</key><false/></dict>
   <key>ProcessType</key><string>Background</string>
+  <key>ExitTimeOut</key><integer>300</integer>
   <key>LowPriorityIO</key><true/>
   <key>Nice</key><integer>10</integer>
 </dict>
@@ -89,6 +90,15 @@ pub(crate) fn uninstall() -> Result<String, Error> {
     let _ = run(Command::new("launchctl").args(["bootout", &format!("{}/{LABEL}", domain()?)]));
     fs::remove_file(&path)?;
     Ok(format!("stopped and removed {}", path.display()))
+}
+
+pub(crate) fn stop() -> Result<String, Error> {
+    if !plist_path()?.exists() {
+        return Ok("service is not installed".into());
+    }
+    // Failure just means it was not loaded.
+    let _ = run(Command::new("launchctl").args(["bootout", &format!("{}/{LABEL}", domain()?)]));
+    Ok("stopped the launchd agent".into())
 }
 
 pub(crate) fn status() -> Result<String, Error> {

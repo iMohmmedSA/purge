@@ -93,7 +93,9 @@ impl<'a> Engine<'a> {
         })
     }
 
-    /// Decides and, unless `dry_run`, acts on every project.
+    /// Decides and, unless `dry_run`, acts on every project. Asked to stop
+    /// (see [`purge_process::request_stop`]), it finishes the step under way
+    /// and leaves the rest for the next run.
     pub fn run(
         &self,
         projects: Vec<Project>,
@@ -108,7 +110,10 @@ impl<'a> Engine<'a> {
         let mut rebuilds_left = options.max_rebuilds;
         let units = Unit::group(projects)
             .into_iter()
-            .map(|unit| self.process(unit, state, &processes, options, &mut rebuilds_left))
+            .map_while(|unit| {
+                (!purge_process::stop_requested())
+                    .then(|| self.process(unit, state, &processes, options, &mut rebuilds_left))
+            })
             .collect();
         let report = RunReport {
             started,
@@ -116,7 +121,9 @@ impl<'a> Engine<'a> {
             dry_run: options.dry_run,
             units,
         };
-        if !options.dry_run {
+        // A run cut short is not a run: the next one is due as soon as purge
+        // starts again, and its partial measurements say nothing overall.
+        if !options.dry_run && !purge_process::stop_requested() {
             state.prune();
             state.last_run = Some(report.finished);
             state.footprint = Some(report.footprint());
@@ -250,7 +257,11 @@ impl Context<'_> {
         actions
             .into_iter()
             .map(|action| {
-                let outcome = self.apply(&action, entry);
+                let outcome = if purge_process::stop_requested() {
+                    Outcome::Deferred("purge is stopping".into())
+                } else {
+                    self.apply(&action, entry)
+                };
                 ActionOutcome { action, outcome }
             })
             .collect()
@@ -391,6 +402,14 @@ impl Context<'_> {
             },
         );
         if let Err(err) = build {
+            if purge_process::stop_requested() {
+                // Stopped mid-build: the space is freed, and the user's next
+                // build of the profile simply finishes the work.
+                info!(unit = %self.unit.key().display(), group = group.id, "rebuild stopped: {err}");
+                return Outcome::Done {
+                    freed: before.saturating_sub(after),
+                };
+            }
             return Outcome::Failed(format!("cleaned, but the rebuild failed: {err}"));
         }
         info!(

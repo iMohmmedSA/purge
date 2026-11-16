@@ -725,7 +725,7 @@ dependencies = [
 
 [[package]]
 name = "purge"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -747,7 +747,7 @@ dependencies = [
 
 [[package]]
 name = "purge-config"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "bytesize",
  "directories",
@@ -762,7 +762,7 @@ dependencies = [
 
 [[package]]
 name = "purge-daemon"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "ctrlc",
@@ -780,7 +780,7 @@ dependencies = [
 
 [[package]]
 name = "purge-ecosystem"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "purge-process",
  "tempfile",
@@ -789,7 +789,7 @@ dependencies = [
 
 [[package]]
 name = "purge-ecosystems"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "purge-ecosystem",
  "purge-js",
@@ -798,7 +798,7 @@ dependencies = [
 
 [[package]]
 name = "purge-engine"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "bytesize",
  "purge-config",
@@ -812,7 +812,7 @@ dependencies = [
 
 [[package]]
 name = "purge-js"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "dunce",
  "purge-ecosystem",
@@ -824,7 +824,7 @@ dependencies = [
 
 [[package]]
 name = "purge-notify"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "notify-rust",
  "thiserror",
@@ -832,7 +832,7 @@ dependencies = [
 
 [[package]]
 name = "purge-process"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "rustix",
  "sysinfo",
@@ -840,7 +840,7 @@ dependencies = [
 
 [[package]]
 name = "purge-rust"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "dunce",
  "purge-ecosystem",
@@ -853,7 +853,7 @@ dependencies = [
 
 [[package]]
 name = "purge-scan"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "dunce",
  "purge-ecosystem",
@@ -864,7 +864,7 @@ dependencies = [
 
 [[package]]
 name = "purge-service"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "directories",
  "thiserror",
@@ -872,7 +872,7 @@ dependencies = [
 
 [[package]]
 name = "purge-session"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "purge-config",
  "purge-ecosystems",
@@ -885,7 +885,7 @@ dependencies = [
 
 [[package]]
 name = "purge-state"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "humantime-serde",
  "jiff",

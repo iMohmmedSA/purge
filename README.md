@@ -39,7 +39,8 @@ to your `PATH`).
 
 **To update**, run the same command again. It installs the latest release,
 or says you already have it, and restarts the background service on the
-new version if you installed it.
+new version if you installed it. It also removes a purge you installed
+with `cargo install`, so only one copy is ever on your `PATH`.
 
 **Other ways:**
 

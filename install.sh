@@ -6,7 +6,8 @@
 # Downloads the release archive for this system, checks its SHA-256, and
 # puts `purge`, `purge-rs` and `purged` into ~/.local/bin. Run it again to
 # update: if the background service is installed, it is restarted on the
-# new version.
+# new version. A purge installed with `cargo install` is removed, so the
+# two never compete.
 #
 # Optional settings:
 #   PURGE_VERSION=v0.1.0      install this release instead of the latest
@@ -71,6 +72,22 @@ installed_version() {
     "$INSTALL_DIR/purge" --version 2> /dev/null | sed -n 's/^purge //p'
 }
 
+# Removes purge installed with `cargo install`, which could run instead of
+# this one: the `purge` package, and `purge-cli` and `purge-daemon` from
+# before the first release. Only packages Cargo itself lists are touched.
+remove_cargo_installs() {
+    command -v cargo > /dev/null 2>&1 || return 0
+    installed=$(cargo install --list 2> /dev/null) || return 0
+    for package in purge purge-cli purge-daemon; do
+        printf '%s\n' "$installed" | grep -q "^$package v" || continue
+        if cargo uninstall "$package" > /dev/null 2>&1; then
+            say "removed the copy Cargo installed (\`$package\`)"
+        else
+            say "warning: could not remove the copy Cargo installed; run \`cargo uninstall $package\`"
+        fi
+    done
+}
+
 # Other purge installations on the PATH, which may run instead of this one.
 # Only folders holding `purged` or `purge-rs` count: macOS has a `purge` of
 # its own, which is never run or reported.
@@ -80,8 +97,8 @@ warn_other_copies() {
     for dir in $PATH; do
         [ -n "$dir" ] && [ "$dir" != "$INSTALL_DIR" ] || continue
         if [ -x "$dir/purged" ] || [ -x "$dir/purge-rs" ]; then
-            say "warning: another purge is installed in $dir and may run instead;"
-            say "  remove it (\`cargo uninstall purge\` if Cargo installed it)"
+            say "warning: another purge is installed in $dir and may run instead; remove it"
+            say "  (\`sudo apt remove purge\` or \`sudo dnf remove purge\` if a package installed it)"
         fi
     done
     IFS=$old_ifs
@@ -129,6 +146,8 @@ main() {
     else
         say "installed purge, purge-rs and purged"
     fi
+
+    remove_cargo_installs
 
     # A running service keeps the old version until it restarts; installing
     # it again points it at these files and restarts it.

@@ -6,6 +6,8 @@
 # purge-rs.exe and purged.exe into %LOCALAPPDATA%\Programs\purge, and adds
 # that folder to your user PATH. Run it again to update: a running
 # background service is stopped first and started again on the new version.
+# A purge installed with `cargo install` is removed, so the two never
+# compete.
 #
 # Optional settings (environment variables):
 #   PURGE_VERSION=v0.1.0      install this release instead of the latest
@@ -81,6 +83,23 @@ if ($previous -and "v$previous" -ne $version) {
     Write-Host 'purge: installed purge, purge-rs and purged'
 }
 
+# A copy Cargo installed could run instead of this one: the `purge` package,
+# and `purge-cli` and `purge-daemon` from before the first release. Only
+# packages Cargo itself lists are touched.
+if (Get-Command cargo -ErrorAction SilentlyContinue) {
+    $installed = (cargo install --list 2>$null) -join "`n"
+    foreach ($package in 'purge', 'purge-cli', 'purge-daemon') {
+        if ($installed -match "(?m)^$([regex]::Escape($package)) v") {
+            cargo uninstall $package *> $null
+            if ($LASTEXITCODE -eq 0) {
+                Write-Host "purge: removed the copy Cargo installed (``$package``)"
+            } else {
+                Write-Host "purge: warning: could not remove the copy Cargo installed; run ``cargo uninstall $package``"
+            }
+        }
+    }
+}
+
 # Registering the service again points it at these files and starts it.
 $status = & $purge service status 2>$null
 if ($status -and $status -ne 'not installed') {
@@ -96,8 +115,7 @@ if ($status -and $status -ne 'not installed') {
 foreach ($other in Get-Command purged.exe -All -ErrorAction SilentlyContinue) {
     $otherDir = Split-Path $other.Source
     if ($otherDir -ne $dir) {
-        Write-Host "purge: warning: another purge is installed in $otherDir and may run instead;"
-        Write-Host '  remove it (`cargo uninstall purge` if Cargo installed it)'
+        Write-Host "purge: warning: another purge is installed in $otherDir and may run instead; remove it"
     }
 }
 

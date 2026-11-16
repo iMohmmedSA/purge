@@ -9,6 +9,7 @@ repository.workspace = true
 
 [dependencies]
 purge-ecosystem.workspace = true
+purge-js.workspace = true
 purge-rust.workspace = true
 
 [lints]

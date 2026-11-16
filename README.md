@@ -13,7 +13,8 @@ that adds up to many gigabytes. purge watches the folders where your
 projects live and reclaims that space in the background, removing only what
 the build tools can recreate, and never while you are working on a project.
 
-It runs on Linux, macOS and Windows. Each kind of project is handled by an
+It runs on Linux, macOS and Windows, and handles Rust and
+JavaScript/TypeScript projects today. Each kind of project is handled by an
 *ecosystem*; see [Supported ecosystems](#supported-ecosystems).
 
 ## Install
@@ -149,6 +150,44 @@ See the comments in `purge config show`.
 - **In use:** `cargo`, `rustc`, `rustdoc`, `clippy-driver` or
   `rust-analyzer` running in the project, or a build holding Cargo's locks.
 
+### JavaScript and TypeScript (npm, pnpm, Yarn, Bun)
+
+- **Projects:** every `package.json`; a workspace member belongs to its
+  workspace root (`workspaces` in `package.json`, or `pnpm-workspace.yaml`).
+- **Groups:** only output purge can identify, each needing the tool that
+  makes it to be a dependency of the project:
+
+  | Group | Folder | Needs |
+  |---|---|---|
+  | `node_modules` | `node_modules/` | a lockfile, so it can be installed again exactly |
+  | `next` | `.next/` | `next` |
+  | `nuxt` | `.nuxt/`, `.output/` | `nuxt` |
+  | `sveltekit` | `.svelte-kit/` | `@sveltejs/kit` |
+  | `astro` | `.astro/` | `astro` |
+  | `angular` | `.angular/cache/` | `@angular/cli` |
+  | `turbo` | `.turbo/` | `turbo` |
+  | `nx` | `.nx/cache/` | `nx` |
+  | `parcel` | `.parcel-cache/` | `parcel` |
+  | `docusaurus` | `.docusaurus/` | `@docusaurus/core` |
+
+  Nothing else is touched: not build folders such as `dist/`, not `.env`
+  files or anything else a project keeps, and never a file git tracks
+  (some projects commit `node_modules`).
+- **Builds:** tool caches inside a group, such as `node_modules/.cache/*`,
+  `node_modules/.vite` and `.next/cache/*`, are trimmed when unused.
+- **Last use:** dependencies are written once at install and then only
+  read, so purge counts them as used whenever Node loads one (from file
+  access times, where the filesystem records them) or the sources change.
+- **Shared stores:** pnpm and Bun hard-link packages from a shared store,
+  so removing their `node_modules` frees next to nothing; purge leaves it
+  alone. npm copies packages, so its `node_modules` is worth removing from
+  a dormant project. Yarn's default Plug'n'Play keeps no `node_modules`.
+- **Cleaning:** purge removes these folders directly and never installs or
+  builds; after it cleaned a dormant project, your next `npm install` (or
+  `pnpm install`, ...) brings the dependencies back from the lockfile.
+- **In use:** Node, Bun or Deno running in the project (dev servers,
+  watchers, language servers), or a package manager.
+
 More ecosystems are planned. Each one is a separate crate; see
 [Adding an ecosystem](#adding-an-ecosystem).
 
@@ -182,6 +221,7 @@ core/
 ecosystems/
   api/            the Ecosystem trait and shared fs/command helpers
   rust/           Rust (Cargo): layout, artifacts (groups), units (builds)
+  js/             JavaScript/TypeScript: project roots, known outputs, git check
   all/            registry of supported ecosystems
 platform/
   notify/         desktop notifications

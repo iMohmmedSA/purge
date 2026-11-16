@@ -5,5 +5,8 @@ use purge_ecosystem::Ecosystem;
 
 /// Instances of all supported ecosystems, in detection order.
 pub fn all() -> Vec<Box<dyn Ecosystem>> {
-    vec![Box::new(purge_rust::Rust::new())]
+    vec![
+        Box::new(purge_rust::Rust::new()),
+        Box::new(purge_js::JavaScript::new()),
+    ]
 }

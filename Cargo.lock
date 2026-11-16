@@ -792,6 +792,7 @@ name = "purge-ecosystems"
 version = "0.1.0"
 dependencies = [
  "purge-ecosystem",
+ "purge-js",
  "purge-rust",
 ]
 
@@ -805,6 +806,18 @@ dependencies = [
  "purge-process",
  "purge-scan",
  "purge-state",
+ "tempfile",
+ "tracing",
+]
+
+[[package]]
+name = "purge-js"
+version = "0.1.0"
+dependencies = [
+ "dunce",
+ "purge-ecosystem",
+ "purge-process",
+ "serde_json",
  "tempfile",
  "tracing",
 ]

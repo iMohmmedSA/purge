@@ -18,6 +18,7 @@ purge-session = { path = "core/session", version = "0.1.0" }
 purge-state = { path = "core/state", version = "0.1.0" }
 purge-ecosystem = { path = "ecosystems/api", version = "0.1.0" }
 purge-ecosystems = { path = "ecosystems/all", version = "0.1.0" }
+purge-js = { path = "ecosystems/js", version = "0.1.0" }
 purge-rust = { path = "ecosystems/rust", version = "0.1.0" }
 purge-notify = { path = "platform/notify", version = "0.1.0" }
 purge-process = { path = "platform/process", version = "0.1.0" }

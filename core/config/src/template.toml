@@ -36,8 +36,12 @@ enabled = true
 # Defaults for every project.
 #
 # Per project, purge looks at two clocks: when its sources last changed (or
-# a git commit/checkout happened) and when each profile (debug, release, ...)
-# was last built. Rules are checked in this order:
+# a git commit/checkout happened) and when each profile of its output was
+# last built or used. A profile is a part of the output that can go on its
+# own: for Rust, `debug`, `release` and other Cargo profiles; for
+# JavaScript, `node_modules`, `next`, `nuxt`, `sveltekit`, `astro`,
+# `angular`, `turbo`, `nx`, `parcel` and `docusaurus`. Rules are checked in
+# this order:
 #
 #   1. Dormant: no source change or build for `dormant_after`
 #      -> remove all build output. Nothing is rebuilt.
@@ -50,13 +54,14 @@ enabled = true
 #   4. Bloated profile: still in use, but at least `bloat_factor` times its
 #      size after the last fresh build, and cleaning saves `min_savings`
 #      -> clean and rebuild it at low priority, so it is ready and smaller.
+#      (Rust only: purge never installs or builds JavaScript itself.)
 #      The fresh size is learned for free: after purge cleans a profile,
 #      it records the size of your next build, and after a rebuild, your
 #      next build adds what it left out (tests, examples). A profile with no
 #      recorded size is only rebuilt to measure it if it is
 #      `learn_rebuild_above`.
 #
-# Build output shared by several projects (a `CARGO_TARGET_DIR` or
+# Build output shared by several projects (for Rust, a `CARGO_TARGET_DIR` or
 # `build.target-dir` outside the project) is cleaned only when every project
 # using it allows it, and is never rebuilt.
 [policy]
@@ -79,6 +84,9 @@ build_args = ["--workspace"]
 # [policy.profiles.release]
 # max_age = "30d"
 # rebuild = false
+#
+# [policy.profiles.node_modules]
+# max_age = "60d"
 
 # Overrides for particular projects or folders, applied in order. Any
 # [policy] key can appear here, plus `skip = true` to leave a project alone.

@@ -1,13 +1,13 @@
 [package]
 name = "purge"
-description = "Reclaims disk space from stale build artifacts (Rust target/ folders), running in the background"
+description = "Reclaims disk space from stale build artifacts (Rust target/, JavaScript node_modules and build caches), running in the background"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 readme = "../../README.md"
-keywords = ["cargo", "clean", "disk-space", "target", "build-artifacts"]
+keywords = ["cargo", "node-modules", "clean", "disk-space", "build-artifacts"]
 categories = ["command-line-utilities", "development-tools", "filesystem"]
 
 [lib]

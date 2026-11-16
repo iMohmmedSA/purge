@@ -236,8 +236,11 @@ fn mostly_shared(group: &ArtifactGroup) -> bool {
 }
 
 /// When Node last loaded any package installed in `node_modules`: every
-/// load reads the package's `package.json`.
+/// load reads the package's `package.json`. Links back into the project
+/// (npm, Yarn and pnpm workspaces link each member there) do not count:
+/// those are the project's own files, not installed packages.
 fn last_loaded(node_modules: &Path) -> Option<SystemTime> {
+    let installed = dunce::canonicalize(node_modules).ok()?;
     let packages = fsutil::children(node_modules).flat_map(|entry| {
         let scoped = entry
             .file_name()
@@ -249,7 +252,9 @@ fn last_loaded(node_modules: &Path) -> Option<SystemTime> {
         }
     });
     packages
-        // Follows pnpm's symlinks to the package itself.
+        // Follows pnpm's links to the package itself, inside `node_modules`.
+        .filter_map(|package| dunce::canonicalize(package).ok())
+        .filter(|package| package.starts_with(&installed))
         .filter_map(|package| fs::metadata(package.join("package.json")).ok())
         .filter_map(|meta| meta.accessed().ok())
         .max()
@@ -423,6 +428,28 @@ mod tests {
         fs::remove_file(root.join("node_modules/dep/index.js")).unwrap();
         fs::copy(store.join("big.js"), root.join("node_modules/dep/index.js")).unwrap();
         assert_eq!(inspect(&root, false, None).groups[0].id, NODE_MODULES);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn workspace_links_are_not_installed_packages() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        let old = SystemTime::now() - Duration::from_hours(240);
+        let age = |path: &Path| {
+            fs::File::options()
+                .write(true)
+                .open(path)
+                .unwrap()
+                .set_times(fs::FileTimes::new().set_accessed(old).set_modified(old))
+                .unwrap();
+        };
+        write(&root.join("node_modules/ms/package.json"), "{}");
+        age(&root.join("node_modules/ms/package.json"));
+        // A workspace member, linked into node_modules and just read.
+        write(&root.join("apps/web/package.json"), "{}");
+        std::os::unix::fs::symlink("../apps/web", root.join("node_modules/web")).unwrap();
+        assert_eq!(last_loaded(&root.join("node_modules")), Some(old));
     }
 
     #[test]

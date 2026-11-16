@@ -1,10 +1,9 @@
 //! Finding a project's root: the package itself, or the workspace
 //! (monorepo) it belongs to.
 
-use std::{
-    fs,
-    path::{Path, PathBuf},
-};
+use std::path::{Path, PathBuf};
+
+use purge_ecosystem::fsutil;
 
 /// Lockfiles that pin every installed package, by package manager. With
 /// one, `node_modules` can be installed again exactly as it was.
@@ -50,9 +49,10 @@ fn is_workspace_root(dir: &Path) -> bool {
         || manifest(dir).is_some_and(|manifest| manifest.get("workspaces").is_some())
 }
 
-/// The parsed `package.json` in `dir`.
+/// The parsed `package.json` in `dir`. Read without changing its access
+/// time, which purge uses to tell when Node last loaded a package.
 pub(crate) fn manifest(dir: &Path) -> Option<serde_json::Value> {
-    let text = fs::read(dir.join("package.json")).ok()?;
+    let text = fsutil::read_unnoticed(&dir.join("package.json")).ok()?;
     serde_json::from_slice(&text).ok()
 }
 
@@ -75,6 +75,8 @@ pub(crate) fn depends_on(manifest: &serde_json::Value, name: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
+    use std::fs;
+
     use super::*;
 
     fn write(path: &Path, contents: &str) {
@@ -114,6 +116,22 @@ mod tests {
         let lone = tmp.path().join("lone");
         write(&lone.join("package.json"), "{}");
         assert_eq!(root(&lone), Some(lone));
+    }
+
+    #[test]
+    fn reading_a_manifest_leaves_its_access_time() {
+        let tmp = tempfile::tempdir().unwrap();
+        let file = tmp.path().join("package.json");
+        fs::write(&file, "{}").unwrap();
+        let past = std::time::SystemTime::now() - std::time::Duration::from_hours(240);
+        fs::File::options()
+            .write(true)
+            .open(&file)
+            .unwrap()
+            .set_times(fs::FileTimes::new().set_accessed(past).set_modified(past))
+            .unwrap();
+        assert!(manifest(tmp.path()).is_some());
+        assert_eq!(fs::metadata(&file).unwrap().accessed().unwrap(), past);
     }
 
     #[test]

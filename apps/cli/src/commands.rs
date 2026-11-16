@@ -123,10 +123,7 @@ pub fn clean(session: &Session, path: &Path, request: &CleanRequest) -> Result<E
         if request.rebuild
             && let Some(group) = groups.iter().find(|group| !group.rebuildable)
         {
-            bail!(
-                "`{}` was built by another tool and cannot be rebuilt; drop --rebuild",
-                group.id
-            );
+            bail!("purge cannot rebuild `{}`; drop --rebuild", group.id);
         }
         groups
             .into_iter()
@@ -170,7 +167,13 @@ fn matching_groups<'a>(
         .collect();
     if matching.is_empty() {
         let found: Vec<&str> = groups.iter().map(|g| g.id.as_str()).collect();
-        bail!("no `{profile}` build output; found: {}", found.join(", "));
+        if found.is_empty() {
+            bail!("no `{profile}` output purge can remove here; nothing else either");
+        }
+        bail!(
+            "no `{profile}` output purge can remove here; it has: {}",
+            found.join(", ")
+        );
     }
     Ok(matching)
 }

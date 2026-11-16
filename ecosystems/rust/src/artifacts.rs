@@ -47,6 +47,7 @@ impl Found {
         ArtifactGroup {
             id,
             usage: fsutil::disk_usage_all(&self.paths),
+            last_used: None,
             parts: units::parts(&self.paths, used_times),
             profile: self.profile,
             paths: self.paths,

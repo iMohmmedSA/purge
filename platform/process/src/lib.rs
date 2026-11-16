@@ -65,13 +65,25 @@ mod imp {
 /// A process seen by [`ProcessTable::capture`].
 #[derive(Debug, Clone)]
 pub struct ProcessInfo {
-    /// Executable name without any `.exe` suffix.
+    /// Process name without any `.exe` suffix. Programs may change it:
+    /// Node shows up as `node-MainThread` or `next-server`.
     pub name: String,
+    /// File name of the program it runs, without any `.exe` suffix.
+    pub program: Option<String>,
     pub cwd: Option<PathBuf>,
     pub args: Vec<PathBuf>,
 }
 
 impl ProcessInfo {
+    /// Whether the process is `name`, by its name or its program's file.
+    fn is(&self, name: &str) -> bool {
+        self.name.eq_ignore_ascii_case(name)
+            || self
+                .program
+                .as_deref()
+                .is_some_and(|program| program.eq_ignore_ascii_case(name))
+    }
+
     fn works_in(&self, root: &Path) -> bool {
         self.cwd.as_deref().is_some_and(|cwd| cwd.starts_with(root))
             || self.args.iter().any(|arg| arg.starts_with(root))
@@ -92,13 +104,15 @@ impl ProcessTable {
             true,
             ProcessRefreshKind::nothing()
                 .with_cwd(UpdateKind::Always)
-                .with_cmd(UpdateKind::Always),
+                .with_cmd(UpdateKind::Always)
+                .with_exe(UpdateKind::Always),
         );
         let processes = system
             .processes()
             .values()
             .map(|process| ProcessInfo {
                 name: executable_name(process.name()),
+                program: process.exe().and_then(Path::file_name).map(executable_name),
                 cwd: process.cwd().map(Path::to_path_buf),
                 args: process.cmd().iter().map(PathBuf::from).collect(),
             })
@@ -109,12 +123,9 @@ impl ProcessTable {
     /// Returns a process named one of `names` that is working inside `root`,
     /// either through its working directory or a path argument.
     pub fn find(&self, names: &[&str], root: &Path) -> Option<&ProcessInfo> {
-        self.processes.iter().find(|process| {
-            names
-                .iter()
-                .any(|name| process.name.eq_ignore_ascii_case(name))
-                && process.works_in(root)
-        })
+        self.processes
+            .iter()
+            .find(|process| names.iter().any(|name| process.is(name)) && process.works_in(root))
     }
 }
 
@@ -144,11 +155,13 @@ mod tests {
             processes: vec![
                 ProcessInfo {
                     name: "cargo".into(),
+                    program: Some("cargo".into()),
                     cwd: Some("/work/app/src".into()),
                     args: vec![],
                 },
                 ProcessInfo {
                     name: "rustc".into(),
+                    program: None,
                     cwd: Some("/".into()),
                     args: vec!["/work/lib/src/lib.rs".into()],
                 },
@@ -157,6 +170,20 @@ mod tests {
         assert!(table.find(&["cargo"], Path::new("/work/app")).is_some());
         assert!(table.find(&["rustc"], Path::new("/work/lib")).is_some());
         assert!(table.find(&["cargo"], Path::new("/work/lib")).is_none());
+    }
+
+    #[test]
+    fn matches_programs_that_rename_themselves() {
+        let table = ProcessTable {
+            processes: vec![ProcessInfo {
+                name: "next-server (v1".into(),
+                program: Some("node".into()),
+                cwd: Some("/work/site".into()),
+                args: vec![],
+            }],
+        };
+        assert!(table.find(&["node"], Path::new("/work/site")).is_some());
+        assert!(table.find(&["bun"], Path::new("/work/site")).is_none());
     }
 
     #[test]

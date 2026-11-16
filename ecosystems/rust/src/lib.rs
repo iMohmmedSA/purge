@@ -320,6 +320,7 @@ mod tests {
             profile: profile.into(),
             paths: Vec::new(),
             usage: purge_ecosystem::DiskUsage::default(),
+            last_used: None,
             rebuildable: true,
             parts: Vec::new(),
         }

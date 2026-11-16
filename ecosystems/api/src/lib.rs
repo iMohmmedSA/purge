@@ -48,8 +48,13 @@ impl Project {
 /// Size and freshness of a directory tree.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct DiskUsage {
-    /// Bytes actually allocated on disk, counting hard links once.
+    /// Bytes that removing the tree would free: allocated space of every
+    /// file, except files hard-linked from outside the tree (such as pnpm's
+    /// shared store), which removing the tree does not free.
     pub bytes: u64,
+    /// Allocated space of every file, counting each hard-linked file once,
+    /// wherever its other links are.
+    pub total: u64,
     /// Most recent modification time of any file in the tree. Directories
     /// do not count: removing files from one is not using it.
     pub newest: Option<SystemTime>,
@@ -66,6 +71,11 @@ pub struct ArtifactGroup {
     /// Every directory holding the group's output; never empty.
     pub paths: Vec<PathBuf>,
     pub usage: DiskUsage,
+    /// When the group was last used, if the ecosystem knows better than
+    /// the newest file in it (`usage.newest`), which only shows when it was
+    /// last written. Installed dependencies, for one, are written once and
+    /// then only read.
+    pub last_used: Option<SystemTime>,
     /// Whether [`Ecosystem::rebuild_group`] can build this group again.
     /// Output written by other tools (such as an editor's private build
     /// directory) can be cleaned but not rebuilt.

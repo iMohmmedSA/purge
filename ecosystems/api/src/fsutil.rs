@@ -1,7 +1,7 @@
 //! Filesystem measurements shared by ecosystems.
 
 use std::{
-    collections::HashSet,
+    collections::HashMap,
     fs::{self, File, FileTimes, Metadata},
     io,
     path::{Path, PathBuf},
@@ -19,7 +19,7 @@ pub fn disk_usage(path: &Path) -> DiskUsage {
 /// one of them once.
 pub fn disk_usage_all<P: AsRef<Path>>(paths: impl IntoIterator<Item = P>) -> DiskUsage {
     let mut usage = DiskUsage::default();
-    let mut links = HashSet::new();
+    let mut linked: HashMap<Inode, Links> = HashMap::new();
     let mut stack: Vec<PathBuf> = paths
         .into_iter()
         .map(|p| p.as_ref().to_path_buf())
@@ -32,12 +32,45 @@ pub fn disk_usage_all<P: AsRef<Path>>(paths: impl IntoIterator<Item = P>) -> Dis
             stack.extend(children(&path));
         } else {
             usage.newest = usage.newest.max(meta.modified().ok());
-            if first_link(&meta, &mut links) {
-                usage.bytes += allocated(&meta);
+            let size = allocated(&meta);
+            match hard_links(&meta) {
+                None => {
+                    usage.bytes += size;
+                    usage.total += size;
+                }
+                Some((inode, count)) => {
+                    let links = linked.entry(inode).or_insert(Links {
+                        seen: 0,
+                        count,
+                        size,
+                    });
+                    if links.seen == 0 {
+                        usage.total += size;
+                    }
+                    links.seen += 1;
+                }
             }
         }
     }
+    // A hard-linked file is only freed once every one of its links goes.
+    usage.bytes += linked
+        .values()
+        .filter(|links| links.seen >= links.count)
+        .map(|links| links.size)
+        .sum::<u64>();
     usage
+}
+
+/// A file's identity: device and inode number.
+type Inode = (u64, u64);
+
+/// A hard-linked file met while measuring.
+struct Links {
+    /// Links found inside the measured trees.
+    seen: u64,
+    /// Links the file has in all.
+    count: u64,
+    size: u64,
 }
 
 /// Whether the filesystem holding `dir` updates access times when files are
@@ -143,16 +176,20 @@ fn allocated(meta: &Metadata) -> u64 {
     meta.len()
 }
 
-/// Cargo hard-links final artifacts out of `deps/`; count each inode once.
+/// The identity and link count of a file with more than one hard link, as
+/// Cargo makes for final artifacts and pnpm and Bun for every installed
+/// file. `None` for a file with a single link.
 #[cfg(unix)]
-fn first_link(meta: &Metadata, seen: &mut HashSet<(u64, u64)>) -> bool {
+fn hard_links(meta: &Metadata) -> Option<(Inode, u64)> {
     use std::os::unix::fs::MetadataExt;
-    meta.nlink() <= 1 || seen.insert((meta.dev(), meta.ino()))
+    (meta.nlink() > 1).then(|| ((meta.dev(), meta.ino()), meta.nlink()))
 }
 
+/// Standard Rust cannot read link counts on Windows, so every file counts
+/// as freed there.
 #[cfg(not(unix))]
-fn first_link(_meta: &Metadata, _seen: &mut HashSet<(u64, u64)>) -> bool {
-    true
+fn hard_links(_meta: &Metadata) -> Option<(Inode, u64)> {
+    None
 }
 
 #[cfg(test)]
@@ -173,6 +210,31 @@ mod tests {
             assert_eq!(single, linked);
         }
         assert!(disk_usage(dir.path()).newest.is_some());
+    }
+
+    #[test]
+    fn files_linked_from_outside_are_not_freed() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = dir.path().join("store");
+        let project = dir.path().join("project");
+        fs::create_dir_all(&store).unwrap();
+        fs::create_dir_all(&project).unwrap();
+        fs::write(store.join("shared.js"), vec![1u8; 64 * 1024]).unwrap();
+        fs::hard_link(store.join("shared.js"), project.join("shared.js")).unwrap();
+        fs::write(project.join("own.js"), vec![1u8; 8 * 1024]).unwrap();
+
+        let usage = disk_usage(&project);
+        assert!(usage.total >= 72 * 1024);
+        if cfg!(unix) {
+            // Removing the project frees only its own file.
+            assert!(usage.bytes < 64 * 1024, "{usage:?}");
+            assert!(usage.bytes >= 8 * 1024);
+            // Measured together with the store, the shared file is freed too.
+            assert_eq!(
+                disk_usage_all([&project, &store]).bytes,
+                disk_usage_all([&project, &store]).total
+            );
+        }
     }
 
     #[test]

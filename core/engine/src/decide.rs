@@ -283,7 +283,7 @@ pub fn learn_baselines(artifacts: &Artifacts, state: &mut ProjectState) -> Vec<S
 /// When the user last built `group`. A rebuild by purge itself does not
 /// count, so refreshing a profile never keeps it alive forever.
 pub fn effective_last_use(group: &ArtifactGroup, state: Option<&GroupState>) -> Option<SystemTime> {
-    let newest = group.usage.newest;
+    let newest = group.usage.newest.max(group.last_used);
     match state {
         Some(GroupState {
             refreshed_at: Some(refreshed),
@@ -335,8 +335,10 @@ mod tests {
             paths: vec![PathBuf::from("target").join(id)],
             usage: DiskUsage {
                 bytes: mb * MB,
+                total: mb * MB,
                 newest: Some(days_ago(built_days_ago)),
             },
+            last_used: None,
             rebuildable: true,
             parts: Vec::new(),
         }
@@ -560,6 +562,25 @@ mod tests {
         assert_eq!(
             effective_last_use(&partial.groups[0], state.groups.get("debug")),
             Some(days_ago(3))
+        );
+    }
+
+    #[test]
+    fn reading_a_group_counts_as_using_it() {
+        // Installed a month ago, loaded yesterday: in use.
+        let mut deps = group("node_modules", 500, 30);
+        deps.rebuildable = false;
+        deps.last_used = Some(days_ago(1));
+        assert_eq!(effective_last_use(&deps, None), Some(days_ago(1)));
+        let snap = snapshot(30, vec![deps.clone()]);
+        assert!(decide(&snap, &Policy::default(), None, now()).is_empty());
+
+        // Not loaded since: dormant like any other output.
+        deps.last_used = Some(days_ago(20));
+        let snap = snapshot(30, vec![deps]);
+        assert_eq!(
+            decide(&snap, &Policy::default(), None, now())[0].kind(),
+            "clean-all"
         );
     }
 

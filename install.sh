@@ -4,7 +4,8 @@
 #   curl -LsSf https://github.com/iMohmmedSA/purge/releases/latest/download/install.sh | sh
 #
 # Downloads the release archive for this system, checks its SHA-256, and
-# puts `purge`, `purge-rs` and `purged` into ~/.local/bin. Run it again to
+# puts `purge`, `purge-rs` and `purged` into ~/.local/bin, adding that
+# folder to your shell profile if it is not on your PATH. Run it again to
 # update: if the background service is installed, it is restarted on the
 # new version. A purge installed with `cargo install` is removed, so the
 # two never compete.
@@ -13,6 +14,8 @@
 #   PURGE_VERSION=v0.1.0      install this release instead of the latest
 #   PURGE_INSTALL_DIR=<dir>   install here instead of ~/.local/bin
 #   PURGE_FORCE=1             reinstall even if this version is installed
+#   PURGE_NO_MODIFY_PATH=1    do not add the install folder to your shell
+#                             profile
 set -eu
 
 REPO="iMohmmedSA/purge"
@@ -104,6 +107,46 @@ warn_other_copies() {
     IFS=$old_ifs
 }
 
+# Marks the line the installer adds to a shell profile.
+PROFILE_MARKER="# added by the purge installer"
+
+# Adds $INSTALL_DIR to the PATH in the profile of the user's shell, once.
+# On macOS it goes last, so macOS's own `purge` stays first.
+add_to_path() {
+    if [ -n "${PURGE_NO_MODIFY_PATH:-}" ]; then
+        say "$INSTALL_DIR is not on your PATH; add it to use purge from any folder"
+        return 0
+    fi
+    darwin=false
+    [ "$(uname -s)" = Darwin ] && darwin=true
+    case "${SHELL:-}" in
+        */zsh) profile="$HOME/.zshrc" ;;
+        */bash) if $darwin; then profile="$HOME/.bash_profile"; else profile="$HOME/.bashrc"; fi ;;
+        */fish) profile="$HOME/.config/fish/conf.d/purge.fish" ;;
+        *) profile="$HOME/.profile" ;;
+    esac
+    case "$profile" in
+        *.fish)
+            if $darwin; then flag=" --append"; else flag=""; fi
+            line="fish_add_path$flag \"$INSTALL_DIR\""
+            ;;
+        *)
+            if $darwin; then
+                line="export PATH=\"\$PATH:$INSTALL_DIR\""
+            else
+                line="export PATH=\"$INSTALL_DIR:\$PATH\""
+            fi
+            ;;
+    esac
+    if [ -f "$profile" ] && grep -qF "$PROFILE_MARKER" "$profile"; then
+        say "$INSTALL_DIR is added to your PATH in $profile; open a new terminal to use it"
+        return 0
+    fi
+    mkdir -p "$(dirname "$profile")"
+    printf '\n%s\n%s\n' "$PROFILE_MARKER" "$line" >> "$profile"
+    say "added $INSTALL_DIR to your PATH in $profile; open a new terminal to use it"
+}
+
 main() {
     need curl
     need tar
@@ -165,17 +208,12 @@ main() {
     # folder after everything else so Apple's command stays as it is.
     if [ "$(uname -s)" = Darwin ]; then
         command=purge-rs
-        path_line="export PATH=\"\$PATH:$INSTALL_DIR\""
     else
         command=purge
-        path_line="export PATH=\"$INSTALL_DIR:\$PATH\""
     fi
     case ":$PATH:" in
         *":$INSTALL_DIR:"*) ;;
-        *)
-            say "$INSTALL_DIR is not on your PATH; add this line to your shell profile:"
-            printf '\n    %s\n\n' "$path_line"
-            ;;
+        *) add_to_path ;;
     esac
     [ "$command" = purge ] || say "on macOS, use \`purge-rs\`: macOS has a \`purge\` of its own"
     [ -n "$previous" ] || say "get started: $command config init ~/Dev"

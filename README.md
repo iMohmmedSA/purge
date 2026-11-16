@@ -34,8 +34,10 @@ powershell -ExecutionPolicy Bypass -c "irm https://github.com/iMohmmedSA/purge/r
 The installer downloads the latest release for your system, checks its
 checksum, and installs three commands: `purge`, the same tool as
 `purge-rs`, and `purged`, the background daemon. They go into
-`~/.local/bin` (on Windows, `%LOCALAPPDATA%\Programs\purge`, which is added
-to your `PATH`).
+`~/.local/bin` (on Windows, `%LOCALAPPDATA%\Programs\purge`). If that folder
+is not on your `PATH`, the installer adds it to your shell profile (one
+marked line; set `PURGE_NO_MODIFY_PATH=1` to skip that), and you open a new
+terminal to use purge.
 
 **To update**, run the same command again. It installs the latest release,
 or says you already have it, and restarts the background service on the
@@ -63,12 +65,11 @@ purge service install              # run in the background, starting at login
 ```
 
 **macOS:** macOS has a `purge` command of its own, which stays as it is:
-use `purge-rs`, the same tool under a name nothing else uses. The first
-line adds `~/.local/bin`, where the installer puts it, to the end of your
-`PATH`, so it adds `purge-rs` without replacing anything:
+use `purge-rs`, the same tool under a name nothing else uses. (The
+installer adds its folder to the end of your `PATH`, so it never replaces
+a command you already have.)
 
 ```sh
-echo 'export PATH="$PATH:$HOME/.local/bin"' >> ~/.zprofile && source ~/.zprofile
 purge-rs config init ~/Dev         # choose the folders to watch
 purge-rs scan                      # preview: what would happen right now
 purge-rs service install           # run in the background, starting at login
@@ -250,7 +251,12 @@ More ecosystems are planned. Each one is a separate crate; see
    | Cargo | `cargo uninstall purge` |
    | the `.deb` / `.rpm` package | `sudo apt remove purge` / `sudo dnf remove purge` |
 
-3. Optionally, delete purge's settings and history:
+3. If the installer added its folder to your `PATH`, remove the two lines
+   starting with `# added by the purge installer` from your shell profile
+   (`~/.zshrc`, `~/.bashrc`, `~/.bash_profile`, `~/.profile`, or
+   `~/.config/fish/conf.d/purge.fish`).
+
+4. Optionally, delete purge's settings and history:
 
    | System | Folders |
    |---|---|

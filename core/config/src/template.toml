@@ -33,6 +33,21 @@ max_rebuilds = 2
 # Desktop notification after a run that freed space or hit errors.
 enabled = true
 
+[caches]
+# Package caches shared between projects. By default only pnpm's store is
+# pruned, with `pnpm store prune`: it removes just the packages no project
+# uses. Cargo cleans its own cache; Yarn's is never touched, since projects
+# load packages straight from it.
+enabled = true
+# At most once per cache in this long, and only when it frees this much.
+every = "7d"
+min_savings = "100 MB"
+# npm and Bun cannot tell what is unused, so they are only cleared entirely,
+# and only if listed here. Projects keep working; their next install
+# downloads again what they need.
+clear = []
+# clear = ["npm", "bun"]
+
 # Defaults for every project.
 #
 # Per project, purge looks at two clocks: when its sources last changed (or

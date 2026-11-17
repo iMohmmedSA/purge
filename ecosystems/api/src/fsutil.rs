@@ -73,6 +73,26 @@ struct Links {
     size: u64,
 }
 
+/// Allocated space of the files in a tree that have no other hard link:
+/// what removing them frees. In a store that projects hard-link to (pnpm,
+/// Bun), exactly the files no project uses. Windows counts every file, as
+/// link counts are not available there.
+pub fn unlinked_bytes(path: &Path) -> u64 {
+    let mut bytes = 0;
+    let mut stack = vec![path.to_path_buf()];
+    while let Some(path) = stack.pop() {
+        let Ok(meta) = fs::symlink_metadata(&path) else {
+            continue;
+        };
+        if meta.is_dir() {
+            stack.extend(children(&path));
+        } else if hard_links(&meta).is_none() {
+            bytes += allocated(&meta);
+        }
+    }
+    bytes
+}
+
 /// Whether the filesystem holding `dir` updates access times when files are
 /// read, at least daily (Linux's default `relatime` does; `noatime` mounts
 /// and Windows by default do not). Finds out by reading a scratch file in
@@ -210,6 +230,19 @@ mod tests {
             assert_eq!(single, linked);
         }
         assert!(disk_usage(dir.path()).newest.is_some());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn counts_files_nothing_else_links_to() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = dir.path().join("store");
+        fs::create_dir_all(&store).unwrap();
+        fs::write(store.join("used"), vec![1u8; 64 * 1024]).unwrap();
+        fs::write(store.join("unused"), vec![1u8; 8 * 1024]).unwrap();
+        fs::hard_link(store.join("used"), dir.path().join("project-copy")).unwrap();
+        let unused = unlinked_bytes(&store);
+        assert!((8 * 1024..64 * 1024).contains(&unused), "{unused}");
     }
 
     #[test]

@@ -139,6 +139,13 @@ impl ProcessTable {
 
     /// Returns a process named one of `names` that is working inside `root`,
     /// either through its working directory or a path argument.
+    /// Returns a process named one of `names`, wherever it works.
+    pub fn find_anywhere(&self, names: &[&str]) -> Option<&ProcessInfo> {
+        self.processes
+            .iter()
+            .find(|process| names.iter().any(|name| process.is(name)))
+    }
+
     pub fn find(&self, names: &[&str], root: &Path) -> Option<&ProcessInfo> {
         self.processes
             .iter()

@@ -40,6 +40,23 @@ fn message(report: &RunReport) -> Option<(String, String)> {
             Outcome::Failed(_) => Some(format!("{}: {} failed", unit.unit.name(), action.action)),
             Outcome::Planned { .. } | Outcome::Deferred(_) => None,
         })
+        .chain(
+            report
+                .caches
+                .iter()
+                .filter_map(|cache| match cache.outcome.as_ref()? {
+                    Outcome::Done { freed } => Some(format!(
+                        "{}: {} ({})",
+                        cache.cache.name,
+                        cache.action,
+                        format_bytes(*freed)
+                    )),
+                    Outcome::Failed(_) => {
+                        Some(format!("{}: {} failed", cache.cache.name, cache.action))
+                    }
+                    Outcome::Planned { .. } | Outcome::Deferred(_) => None,
+                }),
+        )
         .collect();
     let mut body = lines[..lines.len().min(MAX_LINES)].join("\n");
     if lines.len() > MAX_LINES {
@@ -82,6 +99,7 @@ mod tests {
                 actions,
                 ..UnitReport::new(unit)
             }],
+            caches: Vec::new(),
         }
     }
 

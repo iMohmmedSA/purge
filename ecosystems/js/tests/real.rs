@@ -79,3 +79,34 @@ fn pnpm_dependencies_are_left_alone() {
     js.clean_all(&project).unwrap();
     assert!(root.join("node_modules/ms/index.js").exists());
 }
+
+#[test]
+fn pnpm_store_counts_only_what_no_project_uses() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = dunce::canonicalize(tmp.path()).unwrap();
+    package(&root);
+    if run(&root, "pnpm", &["add", "is-odd@3.0.1"]).is_none() {
+        eprintln!("skipped: pnpm is not installed");
+        return;
+    }
+    let js = JavaScript::new();
+    let store = |js: &JavaScript| {
+        js.shared_caches(std::slice::from_ref(&root))
+            .into_iter()
+            .find(|cache| cache.id == "pnpm")
+            .expect("the pnpm store serving the project")
+    };
+    // A package no other test installs: tests run in parallel, and a
+    // package another project links to is rightly not unused.
+    let used = store(&js);
+    assert!(used.unused_only);
+    let index = fs::metadata(root.join("node_modules/is-odd/index.js")).unwrap();
+
+    // Once no project links to the package, its files count as unused.
+    fs::remove_dir_all(root.join("node_modules")).unwrap();
+    let unused = store(&js);
+    assert!(
+        unused.unused_bytes >= used.unused_bytes + index.len(),
+        "{used:?} -> {unused:?}"
+    );
+}

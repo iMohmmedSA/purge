@@ -4,7 +4,7 @@ use bytesize::ByteSize;
 use purge_ecosystem::Snapshot;
 use purge_state::{Footprint, HistoryEntry};
 
-use crate::{Action, Unit};
+use crate::{Action, CacheReport, Unit};
 
 /// Everything one run found and did.
 #[derive(Debug, Clone)]
@@ -13,6 +13,8 @@ pub struct RunReport {
     pub finished: SystemTime,
     pub dry_run: bool,
     pub units: Vec<UnitReport>,
+    /// Shared caches looked at after the projects.
+    pub caches: Vec<CacheReport>,
 }
 
 #[derive(Debug, Clone)]
@@ -77,10 +79,19 @@ impl RunReport {
             .flat_map(|unit| unit.actions.iter().map(move |action| (unit, action)))
     }
 
+    /// Every outcome, of project actions and shared caches alike.
+    fn all_outcomes(&self) -> impl Iterator<Item = &Outcome> {
+        self.outcomes().map(|(_, action)| &action.outcome).chain(
+            self.caches
+                .iter()
+                .filter_map(|cache| cache.outcome.as_ref()),
+        )
+    }
+
     /// Bytes freed, or for a dry run, the known part of what would be freed.
     pub fn freed(&self) -> u64 {
-        self.outcomes()
-            .map(|(_, action)| match action.outcome {
+        self.all_outcomes()
+            .map(|outcome| match *outcome {
                 Outcome::Done { freed }
                 | Outcome::Planned {
                     estimate: Some(freed),
@@ -92,8 +103,8 @@ impl RunReport {
 
     pub fn failures(&self) -> usize {
         let actions = self
-            .outcomes()
-            .filter(|(_, action)| matches!(action.outcome, Outcome::Failed(_)))
+            .all_outcomes()
+            .filter(|outcome| matches!(outcome, Outcome::Failed(_)))
             .count();
         let units = self
             .units
@@ -103,16 +114,21 @@ impl RunReport {
         actions + units
     }
 
-    /// Units in which something was (or would be) done.
+    /// Units and shared caches in which something was (or would be) done.
     pub fn touched(&self) -> usize {
-        self.units
+        let done =
+            |outcome: &Outcome| matches!(outcome, Outcome::Done { .. } | Outcome::Planned { .. });
+        let units = self
+            .units
             .iter()
-            .filter(|p| {
-                p.actions
-                    .iter()
-                    .any(|a| matches!(a.outcome, Outcome::Done { .. } | Outcome::Planned { .. }))
-            })
-            .count()
+            .filter(|unit| unit.actions.iter().any(|action| done(&action.outcome)))
+            .count();
+        let caches = self
+            .caches
+            .iter()
+            .filter(|cache| cache.outcome.as_ref().is_some_and(done))
+            .count();
+        units + caches
     }
 
     /// Build output left once the run's actions are done.
@@ -131,6 +147,23 @@ impl RunReport {
 
     /// Entries for actions that were actually attempted.
     pub fn history(&self) -> Vec<HistoryEntry> {
+        let caches = self.caches.iter().filter_map(|report| {
+            let (freed_bytes, error) = match report.outcome.as_ref()? {
+                Outcome::Done { freed } => (*freed, None),
+                Outcome::Failed(err) => (0, Some(err.clone())),
+                Outcome::Planned { .. } | Outcome::Deferred(_) => return None,
+            };
+            Some(HistoryEntry {
+                at: self.finished,
+                project: report.cache.path.clone(),
+                ecosystem: report.ecosystem.to_owned(),
+                action: report.action.to_owned(),
+                group: Some(report.cache.id.to_owned()),
+                reason: report.note.clone(),
+                freed_bytes,
+                error,
+            })
+        });
         self.outcomes()
             .filter_map(|(unit, action)| {
                 let (freed_bytes, error) = match &action.outcome {
@@ -149,6 +182,7 @@ impl RunReport {
                     error,
                 })
             })
+            .chain(caches)
             .collect()
     }
 }

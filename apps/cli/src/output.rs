@@ -7,7 +7,9 @@ use std::{
 };
 
 use jiff::{Timestamp, tz::TimeZone};
-use purge_engine::{Outcome, RunReport, UnitReport, UnitStatus, format_age, format_bytes};
+use purge_engine::{
+    CacheReport, Outcome, RunReport, UnitReport, UnitStatus, format_age, format_bytes,
+};
 use purge_state::{Footprint, HistoryEntry, Stats, Totals};
 
 /// Width of the bars in `purge stats`.
@@ -16,7 +18,6 @@ const BAR_WIDTH: usize = 24;
 pub fn print_report(report: &RunReport) {
     if report.units.is_empty() {
         println!("no projects with build output found");
-        return;
     }
     let width = report
         .units
@@ -26,6 +27,10 @@ pub fn print_report(report: &RunReport) {
         .unwrap_or(0);
     for unit in &report.units {
         print_unit(unit, width);
+    }
+    print_caches(&report.caches);
+    if report.units.is_empty() && report.caches.is_empty() {
+        return;
     }
 
     println!();
@@ -53,6 +58,42 @@ pub fn print_report(report: &RunReport) {
     let failures = report.failures();
     if failures > 0 {
         println!("{failures} failed; see above");
+    }
+}
+
+fn print_caches(caches: &[CacheReport]) {
+    if caches.is_empty() {
+        return;
+    }
+    println!("\nShared caches");
+    let width = caches
+        .iter()
+        .map(|c| display_path(&c.cache.path).chars().count())
+        .max()
+        .unwrap_or(0);
+    for report in caches {
+        let cache = &report.cache;
+        let what = match &report.outcome {
+            None => report.note.clone(),
+            Some(outcome) => {
+                let result = match outcome {
+                    Outcome::Planned {
+                        estimate: Some(bytes),
+                    } => format!("would free {}", format_bytes(*bytes)),
+                    Outcome::Planned { estimate: None } => "would free an unknown amount".into(),
+                    Outcome::Done { freed } => format!("freed {}", format_bytes(*freed)),
+                    Outcome::Deferred(why) => format!("deferred: {why}"),
+                    Outcome::Failed(err) => format!("FAILED: {err}"),
+                };
+                format!("{}: {} -> {result}", report.action, report.note)
+            }
+        };
+        println!(
+            "  {:<width$}  {:<10}  {:>9}  {what}",
+            display_path(&cache.path),
+            cache.name,
+            format_bytes(cache.total_bytes),
+        );
     }
 }
 
@@ -213,6 +254,8 @@ fn action_label(kind: &str) -> &str {
         "clean" => "unused profiles",
         "refresh" => "rebuilt profiles",
         "trim" => "trimmed profiles",
+        "prune" => "pruned caches",
+        "clear" => "cleared caches",
         other => other,
     }
 }

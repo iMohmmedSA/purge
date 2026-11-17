@@ -28,6 +28,17 @@ pub struct State {
     pub footprint: Option<Footprint>,
     /// Keyed by project root.
     pub projects: BTreeMap<PathBuf, ProjectState>,
+    /// Shared caches, keyed by path.
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    pub caches: BTreeMap<PathBuf, CacheState>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct CacheState {
+    /// When purge last freed space in it.
+    #[serde(with = "humantime_serde", skip_serializing_if = "Option::is_none")]
+    pub pruned_at: Option<SystemTime>,
 }
 
 /// How much build output purge is watching.

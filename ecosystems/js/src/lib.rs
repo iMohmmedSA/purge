@@ -10,6 +10,7 @@
 //! hard links; removing them frees nothing until the store is pruned, so
 //! they measure as nearly empty and are left alone.
 
+mod caches;
 mod git;
 mod outputs;
 mod project;
@@ -22,7 +23,9 @@ use std::{
     time::SystemTime,
 };
 
-use purge_ecosystem::{ArtifactGroup, Artifacts, Ecosystem, Error, Project, Result, fsutil};
+use purge_ecosystem::{
+    ArtifactGroup, Artifacts, Ecosystem, Error, Project, Result, SharedCache, fsutil,
+};
 use purge_process::ProcessTable;
 
 pub(crate) const NAME: &str = "js";
@@ -153,6 +156,14 @@ impl Ecosystem for JavaScript {
             }
         }
         Ok(())
+    }
+
+    fn shared_caches(&self, roots: &[PathBuf]) -> Vec<SharedCache> {
+        caches::find(roots)
+    }
+
+    fn prune_cache(&self, cache: &SharedCache) -> Result<()> {
+        caches::prune(cache)
     }
 
     fn rebuild_group(&self, _: &Project, group: &ArtifactGroup, _: &[String]) -> Result<()> {

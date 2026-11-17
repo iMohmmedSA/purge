@@ -127,6 +127,17 @@ those projects is active (for a single group, once nobody has built it), and
 it is never rebuilt. purge only touches build output outside a project when
 the build tool has tagged it as its own (`CACHEDIR.TAG`).
 
+**Shared caches** live outside projects: package stores and download
+caches that tools share between them. purge frees space there only in what
+**no project on the machine uses**, measured before it acts:
+
+| Cache | What purge does |
+|---|---|
+| pnpm store | `pnpm store prune`, at most weekly, when at least 100 MB is unused. Every project's files are hard links into the store, so a file with no other link is exactly what no project uses |
+| npm cache, Bun cache | nothing, unless listed in `caches.clear`: these tools cannot tell what is unused, so they can only be cleared entirely (projects keep working; their next install downloads again) |
+| Yarn's cache | never: Plug'n'Play projects load their packages straight from it |
+| Cargo's cache | nothing: Cargo removes what no project has used for a month itself |
+
 Every threshold can be set globally, per group, and per project or folder.
 See the comments in `purge config show`.
 
@@ -141,6 +152,8 @@ See the comments in `purge config show`.
   its own.
 - `purge clean` refuses to clean shared build output unless you pass
   `--force`.
+- Shared caches are only pruned of what no project uses, never while their
+  package manager runs, and never Yarn's.
 - Rebuilds run at the lowest CPU priority (on Linux, their I/O priority
   drops with it), are capped per run, and have a per-group cooldown.
 - The daemon postpones runs while the machine is busy, or outside the

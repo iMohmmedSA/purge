@@ -203,6 +203,7 @@ mod tests {
             finished: std::time::SystemTime::UNIX_EPOCH,
             dry_run: false,
             units: Vec::new(),
+            caches: Vec::new(),
         };
 
         let held = RunLock::try_acquire(&session.paths().lock_file()).unwrap();

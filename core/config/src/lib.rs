@@ -9,8 +9,10 @@ mod schedule;
 use std::{
     fs, io,
     path::{Path, PathBuf},
+    time::Duration,
 };
 
+use bytesize::ByteSize;
 use serde::Deserialize;
 
 pub use paths::{Paths, expand_tilde};
@@ -35,6 +37,8 @@ pub struct Config {
     pub max_depth: usize,
     pub schedule: Schedule,
     pub notify: Notify,
+    /// Package caches shared between projects.
+    pub caches: Caches,
     /// Defaults for every project.
     pub policy: PolicyPatch,
     /// Overrides for matching projects, applied in order after `policy`.
@@ -50,6 +54,7 @@ impl Default for Config {
             max_depth: 6,
             schedule: Schedule::default(),
             notify: Notify::default(),
+            caches: Caches::default(),
             policy: PolicyPatch::default(),
             projects: Vec::new(),
         }
@@ -66,6 +71,38 @@ pub struct Notify {
 impl Default for Notify {
     fn default() -> Self {
         Self { enabled: true }
+    }
+}
+
+/// Caches that `caches.clear` can name: those whose tool cannot tell what is
+/// unused. (pnpm's store is pruned of only unused packages without asking.)
+pub const CLEARABLE_CACHES: &[&str] = &["npm", "bun"];
+
+/// What to do with package caches that tools share between projects.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct Caches {
+    /// Free space in shared caches at all.
+    pub enabled: bool,
+    /// At most once per cache in this long.
+    #[serde(with = "humantime_serde")]
+    pub every: Duration,
+    /// Only when it frees at least this much.
+    pub min_savings: ByteSize,
+    /// Caches whose tool cannot tell what is unused (`npm`, `bun`), to be
+    /// cleared entirely anyway. Projects keep working; their next install
+    /// downloads again what they need.
+    pub clear: Vec<String>,
+}
+
+impl Default for Caches {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            every: Duration::from_hours(7 * 24),
+            min_savings: ByteSize::mb(100),
+            clear: Vec::new(),
+        }
     }
 }
 
@@ -162,6 +199,17 @@ impl Config {
                 root.display()
             ));
         }
+        if let Some(unknown) = self
+            .caches
+            .clear
+            .iter()
+            .find(|id| !CLEARABLE_CACHES.contains(&id.as_str()))
+        {
+            return Err(format!(
+                "caches.clear: unknown cache `{unknown}`; it can list {}",
+                CLEARABLE_CACHES.join(", ")
+            ));
+        }
         self.schedule.validate()
     }
 
@@ -256,6 +304,17 @@ mod tests {
         let err = Config::load(&path).unwrap_err();
         assert!(err.to_string().contains("root `Dev`"), "{err}");
         fs::write(&path, r#"roots = ["~/Dev"]"#).unwrap();
+        assert!(Config::load(&path).is_ok());
+    }
+
+    #[test]
+    fn rejects_unknown_caches_to_clear() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.toml");
+        fs::write(&path, "[caches]\nclear = [\"nmp\"]").unwrap();
+        let err = Config::load(&path).unwrap_err();
+        assert!(err.to_string().contains("unknown cache `nmp`"), "{err}");
+        fs::write(&path, "[caches]\nclear = [\"npm\", \"bun\"]").unwrap();
         assert!(Config::load(&path).is_ok());
     }
 

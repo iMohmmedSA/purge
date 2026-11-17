@@ -3,7 +3,7 @@ use std::{
     time::{Instant, SystemTime},
 };
 
-use purge_config::{Config, Policy, Resolver};
+use purge_config::{Caches, Config, Policy, Resolver};
 use purge_ecosystem::{ArtifactGroup, Ecosystem, Project, Snapshot, fsutil};
 use purge_process::ProcessTable;
 use purge_scan::Scanner;
@@ -11,7 +11,9 @@ use purge_state::{GroupState, ProjectState, State};
 use tracing::{info, warn};
 
 use crate::{
-    Action, ActionOutcome, Outcome, RunReport, Unit, UnitReport, UnitStatus, decide,
+    Action, ActionOutcome, CacheReport, Outcome, RunReport, Unit, UnitReport, UnitStatus,
+    caches::{self, decide_cache},
+    decide,
     decide::{effective_last_use, last_activity, learn_baselines},
     report::{format_age, format_bytes},
 };
@@ -33,6 +35,7 @@ pub struct Engine<'a> {
     resolver: Resolver,
     roots: Vec<PathBuf>,
     max_depth: usize,
+    caches: Caches,
 }
 
 impl<'a> Engine<'a> {
@@ -45,6 +48,7 @@ impl<'a> Engine<'a> {
             resolver: Resolver::new(config)?,
             roots: config.roots.clone(),
             max_depth: config.max_depth,
+            caches: config.caches.clone(),
         })
     }
 
@@ -115,11 +119,17 @@ impl<'a> Engine<'a> {
                     .then(|| self.process(unit, state, &processes, options, &mut rebuilds_left))
             })
             .collect();
+        let caches = if purge_process::stop_requested() {
+            Vec::new()
+        } else {
+            self.free_caches(state, &processes, options)
+        };
         let report = RunReport {
             started,
             finished: SystemTime::now(),
             dry_run: options.dry_run,
             units,
+            caches,
         };
         // A run cut short is not a run: the next one is due as soon as purge
         // starts again, and its partial measurements say nothing overall.
@@ -129,6 +139,84 @@ impl<'a> Engine<'a> {
             state.footprint = Some(report.footprint());
         }
         report
+    }
+
+    /// Frees space in the shared caches serving the configured roots, as
+    /// [`decide_cache`] allows.
+    fn free_caches(
+        &self,
+        state: &mut State,
+        processes: &ProcessTable,
+        options: &RunOptions,
+    ) -> Vec<CacheReport> {
+        let mut reports = Vec::new();
+        for ecosystem in self.ecosystems {
+            for cache in ecosystem.shared_caches(&self.roots) {
+                let last = state.caches.get(&cache.path).and_then(|c| c.pruned_at);
+                let (action, note, outcome) =
+                    match decide_cache(&cache, &self.caches, last, SystemTime::now()) {
+                        Err(why) => ("prune", why, None),
+                        Ok(action) => {
+                            let note = caches::reason(&cache, action);
+                            let outcome = self.free_cache(
+                                ecosystem.as_ref(),
+                                &cache,
+                                state,
+                                processes,
+                                options,
+                            );
+                            (action, note, Some(outcome))
+                        }
+                    };
+                reports.push(CacheReport {
+                    ecosystem: ecosystem.name(),
+                    cache,
+                    action,
+                    note,
+                    outcome,
+                });
+            }
+        }
+        reports
+    }
+
+    fn free_cache(
+        &self,
+        ecosystem: &dyn Ecosystem,
+        cache: &purge_ecosystem::SharedCache,
+        state: &mut State,
+        processes: &ProcessTable,
+        options: &RunOptions,
+    ) -> Outcome {
+        if let Some(process) = processes.find_anywhere(cache.tools) {
+            return Outcome::Deferred(format!("`{}` is running", process.name));
+        }
+        if options.dry_run {
+            return Outcome::Planned {
+                estimate: Some(cache.unused_bytes),
+            };
+        }
+        if purge_process::stop_requested() {
+            return Outcome::Deferred("purge is stopping".into());
+        }
+        if let Err(err) = ecosystem.prune_cache(cache) {
+            warn!(cache = %cache.path.display(), "freeing {} failed: {err}", cache.name);
+            return Outcome::Failed(err.to_string());
+        }
+        // Measure again: what no project uses now is what is left of it.
+        let left = ecosystem
+            .shared_caches(&self.roots)
+            .into_iter()
+            .find(|after| after.path == cache.path)
+            .map_or(0, |after| after.unused_bytes);
+        let freed = cache.unused_bytes.saturating_sub(left);
+        state
+            .caches
+            .entry(cache.path.clone())
+            .or_default()
+            .pruned_at = Some(SystemTime::now());
+        info!(cache = %cache.path.display(), "{}: freed {}", cache.name, format_bytes(freed));
+        Outcome::Done { freed }
     }
 
     fn process(
@@ -238,6 +326,7 @@ impl<'a> Engine<'a> {
             finished: SystemTime::now(),
             dry_run: options.dry_run,
             units: vec![report],
+            caches: Vec::new(),
         }
     }
 }

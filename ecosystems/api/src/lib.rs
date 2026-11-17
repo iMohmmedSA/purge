@@ -152,6 +152,27 @@ fn fmt_stderr(stderr: &str) -> String {
 
 pub type Result<T, E = Error> = std::result::Result<T, E>;
 
+/// A cache an ecosystem's tools share between projects, outside any of
+/// them, such as pnpm's package store.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SharedCache {
+    /// Stable short name, used in the configuration: `pnpm`, `npm`, `bun`.
+    pub id: &'static str,
+    /// For people, e.g. `pnpm store`.
+    pub name: String,
+    pub path: PathBuf,
+    /// Allocated space of the whole cache.
+    pub total_bytes: u64,
+    /// Space that clearing it would free: files no project links to.
+    pub unused_bytes: u64,
+    /// Whether [`Ecosystem::prune_cache`] removes only what no project
+    /// uses. Otherwise it clears everything, and projects only lose the
+    /// chance to reinstall without downloading.
+    pub unused_only: bool,
+    /// Programs that use the cache; it is left alone while one runs.
+    pub tools: &'static [&'static str],
+}
+
 /// A kind of project purge knows how to clean.
 pub trait Ecosystem: fmt::Debug + Send + Sync {
     /// Short stable identifier, e.g. `rust`.
@@ -188,4 +209,16 @@ pub trait Ecosystem: fmt::Debug + Send + Sync {
         group: &ArtifactGroup,
         extra_args: &[String],
     ) -> Result<()>;
+
+    /// The shared caches serving projects under `roots`, measured.
+    fn shared_caches(&self, roots: &[PathBuf]) -> Vec<SharedCache> {
+        let _ = roots;
+        Vec::new()
+    }
+
+    /// Frees space in `cache` with its tool's own command: removing what no
+    /// project uses, or everything if it cannot tell.
+    fn prune_cache(&self, cache: &SharedCache) -> Result<()> {
+        Err(Error::Invalid(format!("cannot prune {}", cache.name)))
+    }
 }

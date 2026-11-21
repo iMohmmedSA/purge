@@ -34,7 +34,7 @@ directories = "6.0.0"
 dunce = "1.0.5"
 globset = "0.4.21"
 humantime-serde = "1.1.1"
-jiff = "0.2.43"
+jiff = "1.0.1"
 notify-rust = "4.19.0"
 rustix = { version = "1.1.6", features = ["process"] }
 serde = { version = "1.0.229", features = ["derive"] }
